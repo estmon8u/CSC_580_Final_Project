@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import torch
 
@@ -97,6 +98,7 @@ def run_training_experiment(
     policy_steps: int | None = None,
     checkpoint_interval: int | None = None,
     resume_from: str | Path | None = None,
+    show_progress: bool = True,
 ) -> TrainingRunSummary:
     set_global_seeds(config.seed, deterministic_torch=False)
 
@@ -141,8 +143,21 @@ def run_training_experiment(
         world_model_metrics={},
         behavior_metrics={},
     )
+    run_start = perf_counter()
+
+    if show_progress:
+        print(
+            "[train] starting run | "
+            f"cycles={total_cycles} | "
+            f"start_step={start_step} | "
+            f"warm_start_steps={initial_warm_start_steps} | "
+            f"policy_steps={cycle_policy_steps} | "
+            f"device={resolve_training_device(config.device).type}",
+            flush=True,
+        )
 
     for step in range(start_step, total_cycles + 1):
+        cycle_start = perf_counter()
         cycle_warm_start_steps = initial_warm_start_steps if step == 1 and start_step == 1 else 0
         latest_metrics = run_training_cycle(
             config,
@@ -180,6 +195,28 @@ def run_training_experiment(
             metrics=latest_metrics,
             checkpoint_file=checkpoint_file,
         )
+
+        if show_progress:
+            cycle_seconds = perf_counter() - cycle_start
+            elapsed_seconds = perf_counter() - run_start
+            world_total = latest_metrics.world_model_metrics.get("total_loss")
+            actor_loss = latest_metrics.behavior_metrics.get("actor_loss")
+            critic_loss = latest_metrics.behavior_metrics.get("critic_loss")
+            checkpoint_text = checkpoint_file.name if checkpoint_file is not None else "-"
+            print(
+                "[train] "
+                f"step={step}/{total_cycles} | "
+                f"warm={latest_metrics.warm_start_added} | "
+                f"policy={latest_metrics.policy_added} | "
+                f"replay={latest_metrics.replay_size} | "
+                f"world_total={world_total:.4f} | "
+                f"actor={actor_loss:.4f} | "
+                f"critic={critic_loss:.4f} | "
+                f"cycle_s={cycle_seconds:.1f} | "
+                f"elapsed_s={elapsed_seconds:.1f} | "
+                f"checkpoint={checkpoint_text}",
+                flush=True,
+            )
 
     latest_record = flatten_cycle_metrics(total_cycles, latest_metrics)
     return TrainingRunSummary(
