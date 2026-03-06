@@ -17,6 +17,12 @@ from tiny_dreamer_highway.evaluation.prediction_eval import (
 	evaluate_n_step_predictions,
 	rollout_imagined_observations,
 )
+from tiny_dreamer_highway.evaluation.training_analysis import (
+	export_training_history_artifacts,
+	load_cycle_metrics_history,
+	plot_training_history,
+	summarize_training_history,
+)
 from tiny_dreamer_highway.evaluation.visualization import (
 	build_prediction_video_frames,
 	export_prediction_artifacts,
@@ -36,8 +42,12 @@ __all__ = [
 	"export_prediction_media_bundle",
 	"export_prediction_video",
 	"export_submission_bundle",
+	"export_training_history_artifacts",
+	"load_cycle_metrics_history",
+	"plot_training_history",
 	"plot_prediction_metrics",
 	"rollout_imagined_observations",
 	"save_prediction_comparison_grid",
+	"summarize_training_history",
 	"write_bundle_manifest",
 ]
