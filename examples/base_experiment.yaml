@@ -1,0 +1,27 @@
+# Name: Esteban
+# Course: CSC 580 AI 2
+# Assignment: Final Project — Dream the Road
+# AI tools consulted: GitHub Copilot
+
+seed: 7
+device: cpu
+env:
+  env_id: highway-v0
+  observation_height: 64
+  observation_width: 64
+  frame_stack: 1
+  max_episode_steps: 40
+  action:
+    type: continuous
+    longitudinal: true
+    lateral: true
+replay:
+  capacity: 10000
+  sequence_length: 8
+  batch_size: 4
+training:
+  batch_size: 4
+  imagination_horizon: 5
+  world_model_lr: 0.0003
+  actor_lr: 0.00008
+  critic_lr: 0.00008
