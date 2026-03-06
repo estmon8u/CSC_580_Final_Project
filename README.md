@@ -40,6 +40,14 @@ The first implementation milestone focuses on:
 3. implement random rollout collection
 4. add the world model modules
 
+## First real training loop
+
+The project now includes a first baseline training runner so the next phase can move beyond smoke tests.
+
+Per project workflow, actual training runs should be launched from a dedicated Google Colab notebook rather than from local ad hoc terminal commands.
+
+The training runner initializes the replay buffer, world model, actor, and critic, then runs multi-cycle training while writing logs and checkpoints under the chosen artifact directory.
+
 ## Colab workflow
 
 Use GitHub for source code and Google Drive for generated artifacts.
@@ -53,5 +61,10 @@ Recommended loop:
 5. write checkpoints, videos, and plots to the mounted Drive folder
 
 The notebook should stay thin and call reusable functions from `src/tiny_dreamer_highway/`.
+
+Recommended notebook split:
+
+- `01_colab_setup_and_smoke_tests.ipynb` for environment setup and smoke validation
+- `02_colab_training_runs.ipynb` for actual training experiments and checkpoint generation
 
 See [docs/architecture_overview.md](docs/architecture_overview.md) and [docs/milestones.md](docs/milestones.md) before extending the package.

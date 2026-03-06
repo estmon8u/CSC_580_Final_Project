@@ -18,6 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
+tdh = "tiny_dreamer_highway.cli:main"
 tdh-collect-random = "tiny_dreamer_highway.cli:main"
 
 [dependency-groups]

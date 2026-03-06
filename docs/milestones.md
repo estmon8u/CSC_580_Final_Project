@@ -119,10 +119,11 @@ Still missing:
 
 Run real training experiments, tune the baseline, and analyze learning behavior.
 
-**Status:** Not started.
+**Status:** In progress.
 
 Planned work:
 
+- baseline training runner with checkpoint/log export
 - run longer training jobs and save periodic checkpoints
 - inspect reward trends and world-model losses over time
 - compare early and late checkpoints qualitatively and quantitatively

@@ -42,6 +42,10 @@ def _observation_to_tensor(observation: np.ndarray) -> Tensor:
     return observation_tensor
 
 
+def _module_device(module: torch.nn.Module) -> torch.device:
+    return next(module.parameters()).device
+
+
 def seed_latent_state(
     world_model: TinyWorldModel,
     observations: Tensor,
@@ -67,7 +71,8 @@ def collect_actor_transitions(
     if seed is not None and hasattr(env.action_space, "seed"):
         env.action_space.seed(seed)
     observation, _ = env.reset(seed=seed)
-    prev_state = world_model.rssm.initial_state(batch_size=1)
+    model_device = _module_device(world_model)
+    prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
     added = 0
 
     try:
@@ -75,7 +80,9 @@ def collect_actor_transitions(
             with torch.no_grad():
                 action_tensor = actor(prev_state.features)
                 action = action_tensor.squeeze(0).cpu().numpy().astype(np.float32)
-                observation_tensor = _observation_to_tensor(np.asarray(observation, dtype=np.uint8))
+                observation_tensor = _observation_to_tensor(
+                    np.asarray(observation, dtype=np.uint8)
+                ).to(model_device)
                 posterior = world_model(observation_tensor, action_tensor, prev_state=prev_state)
                 prev_state = posterior.posterior_state
 
@@ -95,7 +102,7 @@ def collect_actor_transitions(
 
             if done:
                 observation, _ = env.reset()
-                prev_state = world_model.rssm.initial_state(batch_size=1)
+                prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
     finally:
         env.close()
 
@@ -129,9 +136,10 @@ def run_training_cycle(
         raise ValueError("replay buffer does not contain enough samples for a training cycle")
 
     batch = replay_buffer.sample_batch(batch_size=batch_size)
-    observations = torch.as_tensor(batch.observations)
-    actions = torch.as_tensor(batch.actions, dtype=torch.float32)
-    rewards = torch.as_tensor(batch.rewards, dtype=torch.float32)
+    model_device = _module_device(world_model)
+    observations = torch.as_tensor(batch.observations, device=model_device)
+    actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
+    rewards = torch.as_tensor(batch.rewards, dtype=torch.float32, device=model_device)
 
     _, world_model_metrics = train_world_model_step(
         world_model,

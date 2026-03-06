@@ -31,6 +31,12 @@ from tiny_dreamer_highway.training.pipeline import (
 	run_training_cycle,
 	seed_latent_state,
 )
+from tiny_dreamer_highway.training.experiment import (
+	TrainingRunSummary,
+	initialize_training_state,
+	run_training_experiment,
+	resolve_training_device,
+)
 from tiny_dreamer_highway.training.world_model_step import (
 	compute_world_model_losses,
 	train_world_model_step,
@@ -44,6 +50,7 @@ from tiny_dreamer_highway.training.sequence_world_model_step import (
 __all__ = [
 	"ImaginedTrajectory",
 	"PipelineCycleMetrics",
+	"TrainingRunSummary",
 	"checkpoint_path",
 	"collect_actor_transitions",
 	"compute_sequence_world_model_losses",
@@ -54,8 +61,11 @@ __all__ = [
 	"find_latest_checkpoint",
 	"flatten_cycle_metrics",
 	"imagine_trajectory",
+	"initialize_training_state",
 	"load_checkpoint",
+	"resolve_training_device",
 	"run_training_cycle",
+	"run_training_experiment",
 	"save_checkpoint",
 	"seed_latent_state",
 	"stack_sequence_batch",

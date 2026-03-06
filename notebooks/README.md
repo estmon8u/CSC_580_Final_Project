@@ -10,12 +10,12 @@ Use notebooks in this folder for polished experiments, debugging views, and fina
 Current primary notebook:
 
 - `01_colab_setup_and_smoke_tests.ipynb` for Colab environment setup plus end-to-end smoke validation against pushed package code
+- `02_colab_training_runs.ipynb` for actual training experiments, checkpoint generation, and run notes in Colab
 
 Suggested order:
 
-1. environment setup and replay inspection
-2. world model forward-pass debugging
-3. imagination and actor-critic validation
-4. final evaluation and video exports
+1. run `01_colab_setup_and_smoke_tests.ipynb` to validate the pushed code path
+2. run `02_colab_training_runs.ipynb` for longer training experiments and checkpoint generation
+3. return to the smoke-test notebook only when validating new functionality or export helpers
 
 The source of truth stays in `src/tiny_dreamer_highway/`.

@@ -10,6 +10,8 @@ __pycache__/
 artifacts/checkpoints/
 artifacts/logs/
 artifacts/media/
+artifacts/bundles/
+artifacts/local_*/
 *.pyc
 *.pyo
 *.pyd

@@ -50,6 +50,11 @@ Before training, always verify:
 - one random action step succeeds
 - artifact directory exists on Drive
 
+Keep Colab notebooks split by purpose:
+
+- one notebook for setup and smoke validation
+- one notebook for real or fake training runs and checkpoint generation
+
 ## Drive layout suggestion
 
 Use a Drive folder like:

@@ -14,6 +14,7 @@ from pathlib import Path
 from tiny_dreamer_highway.config import ExperimentConfig, load_experiment_config
 from tiny_dreamer_highway.data.collect_random_rollouts import collect_random_transitions
 from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
+from tiny_dreamer_highway.training.experiment import run_training_experiment
 
 
 def summarize_config(config: ExperimentConfig) -> str:
@@ -53,6 +54,41 @@ def run_collect_random(config_path: Path, steps: int) -> str:
     return summarize_collection(config, replay_buffer, added)
 
 
+def summarize_training_run(summary) -> str:
+    checkpoint_text = str(summary.latest_checkpoint) if summary.latest_checkpoint is not None else "none"
+    return (
+        f"Completed {summary.completed_cycles} training cycles | "
+        f"replay_size={summary.replay_size} | "
+        f"latest_checkpoint={checkpoint_text} | "
+        f"world_total_loss={summary.latest_record.get('world_model/total_loss')} | "
+        f"actor_loss={summary.latest_record.get('behavior/actor_loss')} | "
+        f"critic_loss={summary.latest_record.get('behavior/critic_loss')}"
+    )
+
+
+def run_train_baseline(
+    config_path: Path,
+    artifact_root: Path,
+    *,
+    cycles: int | None = None,
+    warm_start_steps: int | None = None,
+    policy_steps: int | None = None,
+    checkpoint_interval: int | None = None,
+    resume_from: Path | None = None,
+) -> str:
+    config = load_experiment_config(config_path)
+    summary = run_training_experiment(
+        config,
+        artifact_root,
+        cycles=cycles,
+        warm_start_steps=warm_start_steps,
+        policy_steps=policy_steps,
+        checkpoint_interval=checkpoint_interval,
+        resume_from=resume_from,
+    )
+    return summarize_training_run(summary)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny Dreamer Highway CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -85,6 +121,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of random environment steps to collect.",
     )
 
+    train_baseline = subparsers.add_parser(
+        "train-baseline",
+        help="Run a real multi-cycle baseline training job and save logs/checkpoints.",
+    )
+    train_baseline.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to the experiment YAML file.",
+    )
+    train_baseline.add_argument(
+        "--artifact-root",
+        type=Path,
+        required=True,
+        help="Directory where checkpoints and logs will be written.",
+    )
+    train_baseline.add_argument(
+        "--cycles",
+        type=int,
+        default=None,
+        help="Optional override for the number of training cycles.",
+    )
+    train_baseline.add_argument(
+        "--warm-start-steps",
+        type=int,
+        default=None,
+        help="Optional override for the first-cycle random warm-start steps.",
+    )
+    train_baseline.add_argument(
+        "--policy-steps",
+        type=int,
+        default=None,
+        help="Optional override for actor-driven collection steps per cycle.",
+    )
+    train_baseline.add_argument(
+        "--checkpoint-interval",
+        type=int,
+        default=None,
+        help="Optional override for checkpoint save frequency in cycles.",
+    )
+    train_baseline.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+        help="Optional checkpoint path to resume from.",
+    )
+
     parser.set_defaults(command="show-config")
     return parser
 
@@ -94,6 +177,19 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "collect-random":
         print(run_collect_random(args.config, steps=args.steps))
+        return
+    if args.command == "train-baseline":
+        print(
+            run_train_baseline(
+                args.config,
+                args.artifact_root,
+                cycles=args.cycles,
+                warm_start_steps=args.warm_start_steps,
+                policy_steps=args.policy_steps,
+                checkpoint_interval=args.checkpoint_interval,
+                resume_from=args.resume_from,
+            )
+        )
         return
 
     print(run_show_config(args.config))

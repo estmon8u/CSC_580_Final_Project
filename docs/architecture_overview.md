@@ -80,6 +80,10 @@ So far, the work has focused on proving that the pieces connect correctly:
 
 The next real project phase is to run training campaigns, inspect learning behavior, and tune the system until the agent and world model show meaningful results.
 
+The project now includes a baseline training runner for that phase: it can initialize the model stack, execute multi-cycle training, and write checkpoints plus metrics logs to an artifact directory.
+
+Real training runs should be launched from a dedicated Colab notebook so the smoke-test notebook remains focused on lightweight validation only.
+
 ## Notebook role
 
 The notebook layer is intentionally thin.
@@ -93,7 +97,9 @@ Current notebook usage focuses on:
 - prediction evaluation, plots, video, and submission-bundle smoke tests
 - Colab execution against pushed package code
 
-It is still a smoke-test notebook, not the final polished training-and-report notebook.
+The current setup notebook is still a smoke-test notebook, not the training-run notebook.
+
+Actual training runs should live in a separate Colab notebook so longer jobs, checkpoint generation, and experiment notes do not clutter the smoke-test path.
 
 ## Design rules
 
