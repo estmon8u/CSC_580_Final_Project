@@ -48,6 +48,9 @@ def compute_sequence_world_model_losses(
     observations: Tensor,
     actions: Tensor,
     rewards: Tensor,
+    *,
+    kl_weight: float = 1.0,
+    free_nats: float = 3.0,
 ) -> tuple[list[WorldModelOutput], dict[str, Tensor]]:
     if observations.ndim != 5:
         raise ValueError("observations must have shape (B, T, C, H, W)")
@@ -61,21 +64,32 @@ def compute_sequence_world_model_losses(
     outputs: list[WorldModelOutput] = []
     reconstruction_loss = torch.zeros((), device=observations.device)
     reward_loss = torch.zeros((), device=observations.device)
+    kl_loss = torch.zeros((), device=observations.device)
+    kl_loss_raw = torch.zeros((), device=observations.device)
 
     for step in range(sequence_length):
         output = model(observations[:, step], actions[:, step], prev_state=state)
-        step_losses = compute_world_model_losses(output, observations[:, step], rewards[:, step])
+        step_losses = compute_world_model_losses(
+            output, observations[:, step], rewards[:, step],
+            kl_weight=1.0, free_nats=free_nats,
+        )
         reconstruction_loss = reconstruction_loss + step_losses["reconstruction_loss"]
         reward_loss = reward_loss + step_losses["reward_loss"]
+        kl_loss = kl_loss + step_losses["kl_loss"]
+        kl_loss_raw = kl_loss_raw + step_losses["kl_loss_raw"]
         outputs.append(output)
         state = output.posterior_state
 
     reconstruction_loss = reconstruction_loss / sequence_length
     reward_loss = reward_loss / sequence_length
-    total_loss = reconstruction_loss + reward_loss
+    kl_loss = kl_loss / sequence_length
+    kl_loss_raw = kl_loss_raw / sequence_length
+    total_loss = reconstruction_loss + reward_loss + kl_weight * kl_loss
     return outputs, {
         "reconstruction_loss": reconstruction_loss,
         "reward_loss": reward_loss,
+        "kl_loss": kl_loss,
+        "kl_loss_raw": kl_loss_raw.detach(),
         "total_loss": total_loss,
     }
 
@@ -86,9 +100,15 @@ def train_sequence_world_model_step(
     observations: Tensor,
     actions: Tensor,
     rewards: Tensor,
+    *,
+    kl_weight: float = 1.0,
+    free_nats: float = 3.0,
 ) -> tuple[list[WorldModelOutput], dict[str, float]]:
     optimizer.zero_grad(set_to_none=True)
-    outputs, losses = compute_sequence_world_model_losses(model, observations, actions, rewards)
+    outputs, losses = compute_sequence_world_model_losses(
+        model, observations, actions, rewards,
+        kl_weight=kl_weight, free_nats=free_nats,
+    )
     losses["total_loss"].backward()
     optimizer.step()
     return outputs, {name: float(value.detach().cpu().item()) for name, value in losses.items()}

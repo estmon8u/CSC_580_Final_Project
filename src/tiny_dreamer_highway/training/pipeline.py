@@ -135,6 +135,7 @@ def run_training_cycle(
     if not replay_buffer.can_sample(batch_size=batch_size):
         raise ValueError("replay buffer does not contain enough samples for a training cycle")
 
+    training_config: TrainingConfig = config.training
     batch = replay_buffer.sample_batch(batch_size=batch_size)
     model_device = _module_device(world_model)
     observations = torch.as_tensor(batch.observations, device=model_device)
@@ -147,10 +148,11 @@ def run_training_cycle(
         observations,
         actions,
         rewards,
+        kl_weight=training_config.kl_weight,
+        free_nats=training_config.free_nats,
     )
 
     start_state = seed_latent_state(world_model, observations, actions)
-    training_config: TrainingConfig = config.training
     behavior_metrics = train_behavior_step(
         world_model,
         actor,

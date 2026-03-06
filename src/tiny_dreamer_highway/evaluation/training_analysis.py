@@ -78,12 +78,18 @@ def plot_training_history(
     imagined_reward = [float(row["behavior/imagined_reward_mean"]) for row in history]
     replay_size = [int(row["replay_size"]) for row in history]
 
+    has_kl = "world_model/kl_loss" in history[0]
+    if has_kl:
+        world_kl = [float(row["world_model/kl_loss"]) for row in history]
+
     figure, axes = plt.subplots(2, 2, figsize=(12, 8), tight_layout=True)
     figure.suptitle(title)
 
     axes[0, 0].plot(steps, world_total, label="total")
     axes[0, 0].plot(steps, world_recon, label="reconstruction")
     axes[0, 0].plot(steps, world_reward, label="reward")
+    if has_kl:
+        axes[0, 0].plot(steps, world_kl, label="kl", linestyle="--")
     axes[0, 0].set_title("World-model losses")
     axes[0, 0].set_xlabel("Step")
     axes[0, 0].legend()

@@ -19,6 +19,8 @@ class LatentState:
     embedding: Tensor | None = None
     deterministic: Tensor | None = None
     stochastic: Tensor | None = None
+    dist_mean: Tensor | None = None
+    dist_std: Tensor | None = None
 
     @property
     def features(self) -> Tensor:

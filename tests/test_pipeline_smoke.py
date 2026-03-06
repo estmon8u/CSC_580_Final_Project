@@ -126,6 +126,8 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
     assert set(metrics.world_model_metrics.keys()) == {
         "reconstruction_loss",
         "reward_loss",
+            "kl_loss",
+            "kl_loss_raw",
         "total_loss",
     }
     assert set(metrics.behavior_metrics.keys()) == {

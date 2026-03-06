@@ -87,7 +87,12 @@ class RecurrentStateSpaceModel(nn.Module):
         prior_stats = self.prior_model(deterministic)
         prior_mean, prior_std = self._distribution_parameters(prior_stats)
         stochastic = self._sample_stochastic(prior_mean, prior_std)
-        return LatentState(deterministic=deterministic, stochastic=stochastic)
+        return LatentState(
+            deterministic=deterministic,
+            stochastic=stochastic,
+            dist_mean=prior_mean,
+            dist_std=prior_std,
+        )
 
     def observe_step(self, prev_state: LatentState, action: Tensor, embedding: Tensor) -> LatentState:
         deterministic = self._next_deterministic(prev_state, action)
@@ -98,4 +103,6 @@ class RecurrentStateSpaceModel(nn.Module):
             embedding=embedding,
             deterministic=deterministic,
             stochastic=stochastic,
+            dist_mean=posterior_mean,
+            dist_std=posterior_std,
         )

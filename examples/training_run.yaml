@@ -2,9 +2,13 @@
 # Course: CSC 580 AI 2
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
+#
+# Production training config for highway-v0 Tiny Dreamer.
+# Use this config for real training runs on Colab (GPU recommended).
+# Expected runtime: ~2-4 hours on Colab T4 for 500 cycles.
 
 seed: 7
-device: cpu
+device: cuda
 env:
   env_id: highway-v0
   observation_height: 64
@@ -16,18 +20,18 @@ env:
     longitudinal: true
     lateral: true
 replay:
-  capacity: 10000
+  capacity: 50000
   sequence_length: 8
-  batch_size: 4
+  batch_size: 32
 training:
-  batch_size: 4
-  imagination_horizon: 5
+  batch_size: 32
+  imagination_horizon: 15
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
-  cycles: 10
-  warm_start_steps: 64
-  policy_steps: 8
-  checkpoint_interval: 5
+  cycles: 500
+  warm_start_steps: 1000
+  policy_steps: 32
+  checkpoint_interval: 25
