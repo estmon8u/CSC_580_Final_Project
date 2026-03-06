@@ -38,27 +38,27 @@ The initial phase established the reusable Python package, experiment configurat
 ## Current implementation status
 
 - Completed baseline layers:
-	- config, replay, env factory, tests
-	- random rollout collection
-	- encoder, RSSM, decoder, reward head
-	- combined world-model forward pass
-	- single-step and short-sequence world-model training helpers
-	- reproducibility seeding
-	- Colab setup and smoke-test notebook
+  - config, replay, env factory, tests
+  - random rollout collection
+  - encoder, RSSM, decoder, reward head
+  - combined world-model forward pass
+  - single-step and short-sequence world-model training helpers
+  - reproducibility seeding
+  - Colab setup and smoke-test notebook
 
 - Next core layers:
-	- imagination rollouts in latent space
-	- actor and critic modules
-	- TD-lambda targets and behavior losses
-	- alternating train/collect pipeline
-	- evaluation metrics, plots, and videos
+  - imagination rollouts in latent space
+  - actor and critic modules
+  - TD-lambda targets and behavior losses
+  - alternating train/collect pipeline
+  - evaluation metrics, plots, and videos
 
 - Deferred until after baseline completion:
-	- WandB
-	- Hydra
-	- `torch.compile`
-	- AMP / autocast
-	- optimizer and replay performance upgrades
+  - WandB
+  - Hydra
+  - `torch.compile`
+  - AMP / autocast
+  - optimizer and replay performance upgrades
 
 ## Notebook role
 
