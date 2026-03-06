@@ -15,6 +15,7 @@ Use Google Drive for:
 - replay snapshots
 - plots
 - videos
+- submission bundles
 - exported notebook results
 
 ## Update loop
@@ -56,6 +57,7 @@ Use a Drive folder like:
 - `MyDrive/CSC_580_Final_Project/artifacts/checkpoints`
 - `MyDrive/CSC_580_Final_Project/artifacts/media`
 - `MyDrive/CSC_580_Final_Project/artifacts/logs`
+- `MyDrive/CSC_580_Final_Project/artifacts/bundles`
 
 ## Rule for this project
 

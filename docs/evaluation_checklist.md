@@ -25,3 +25,17 @@
 - plots and videos are saved into `artifacts/`
 - comparison media can be reused in the final submission bundle
 - a manifest and zip bundle can be exported for submission handoff
+
+## Final report polish
+
+- select one representative metrics plot for the write-up
+- select one representative comparison image and one short GIF for the write-up
+- confirm the bundle manifest matches the final artifact set cited in the report
+
+## Submission requirements
+
+- the final Google Drive submission folder includes code, notebook, videos, and report
+- the notebook is cleaned for presentation quality with no draft cells or stray debugging output
+- every submitted file includes name, course, assignment, and AI-tool attribution at the top
+- the report states the word count near the top and reaches at least 2,500 words
+- the report includes charts, tables, deep analysis, conclusions, and course reflection

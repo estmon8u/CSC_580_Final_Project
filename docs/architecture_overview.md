@@ -37,21 +37,28 @@ The initial phase established the reusable Python package, experiment configurat
 
 ## Current implementation status
 
-- Completed baseline layers:
+- Completed baseline smoke-tested layers:
   - config, replay, env factory, tests
   - random rollout collection
   - encoder, RSSM, decoder, reward head
   - combined world-model forward pass
   - single-step and short-sequence world-model training helpers
+  - imagination rollouts, actor, critic, and TD-lambda behavior learning
+  - alternating collect/train pipeline
+  - checkpoint save/load and metrics export
+  - n-step prediction evaluation
+  - plot, comparison-grid, and GIF artifact export
+  - manifest-backed submission bundle export
   - reproducibility seeding
   - combined Colab setup-and-smoke-test notebook
 
-- Next core layers:
-  - imagination rollouts in latent space
-  - actor and critic modules
-  - TD-lambda targets and behavior losses
-  - alternating train/collect pipeline
-  - evaluation metrics, plots, and videos
+- What is not done yet:
+  - sustained end-to-end training runs
+  - evidence that the policy actually improves beyond random behavior
+  - longer-horizon evaluation on trained checkpoints
+  - training-stability tuning and quality-focused optimization
+  - final demo generation from a genuinely trained agent
+  - final report polish and submission packaging
 
 - Deferred until after baseline completion:
   - WandB
@@ -59,6 +66,19 @@ The initial phase established the reusable Python package, experiment configurat
   - `torch.compile`
   - AMP / autocast
   - optimizer and replay performance upgrades
+
+## Phase interpretation
+
+The current codebase should be treated as a validated baseline scaffold, not a finished trained project.
+
+So far, the work has focused on proving that the pieces connect correctly:
+
+- tensors have the expected shapes
+- optimization steps run without errors
+- checkpoints and metrics can be exported
+- notebook smoke tests run against pushed code
+
+The next real project phase is to run training campaigns, inspect learning behavior, and tune the system until the agent and world model show meaningful results.
 
 ## Notebook role
 
@@ -68,8 +88,12 @@ Current notebook usage focuses on:
 
 - environment and dependency sanity checks
 - replay warm-start validation
-- world-model smoke tests
+- world-model and behavior smoke tests
+- pipeline, checkpoint, and metrics smoke tests
+- prediction evaluation, plots, video, and submission-bundle smoke tests
 - Colab execution against pushed package code
+
+It is still a smoke-test notebook, not the final polished training-and-report notebook.
 
 ## Design rules
 

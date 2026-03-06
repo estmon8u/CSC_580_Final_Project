@@ -110,11 +110,41 @@ Completed baseline work:
 
 Still missing:
 
-- final report polish and write-up integration
+- actual multi-iteration training runs on top of the smoke-tested pipeline
+- checkpoint selection based on observed learning behavior
+- evidence that the learned policy improves on the task
+- evaluation on trained checkpoints rather than only smoke-test states
+
+## M6
+
+Run real training experiments, tune the baseline, and analyze learning behavior.
+
+**Status:** Not started.
+
+Planned work:
+
+- run longer training jobs and save periodic checkpoints
+- inspect reward trends and world-model losses over time
+- compare early and late checkpoints qualitatively and quantitatively
+- tune stability-sensitive settings such as learning rates, horizon, rollout lengths, and update ratios
+- determine whether minimal baseline improvements are enough before deeper architectural changes
+
+## M7
+
+Prepare final deliverables after training results are credible.
+
+**Status:** Not started.
+
+Planned work:
+
+- curate final plots, tables, images, and videos
+- clean the notebook for presentation quality
+- assemble the final submission bundle and Drive folder
+- write the final report and reflection
 
 ## Optimization policy
 
-Optional engineering and performance optimizations are intentionally deferred until the baseline pipeline works end to end.
+Optional engineering and performance optimizations are intentionally deferred until the baseline pipeline works end to end and initial real training results are available.
 
 Deferred items include:
 
