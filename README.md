@@ -40,4 +40,18 @@ The first implementation milestone focuses on:
 3. implement random rollout collection
 4. add the world model modules
 
+## Colab workflow
+
+Use GitHub for source code and Google Drive for generated artifacts.
+
+Recommended loop:
+
+1. make changes locally in VS Code
+2. run tests before every push
+3. push validated changes to the personal GitHub repository
+4. in Colab, mount Drive, clone or pull the repository, and install the package
+5. write checkpoints, videos, and plots to the mounted Drive folder
+
+The notebook should stay thin and call reusable functions from `src/tiny_dreamer_highway/`.
+
 See [docs/architecture_overview.md](docs/architecture_overview.md) and [docs/milestones.md](docs/milestones.md) before extending the package.
