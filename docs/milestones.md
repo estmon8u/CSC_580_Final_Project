@@ -69,11 +69,11 @@ Completed baseline work:
 - `td_lambda_returns()`
 - behavior training helper
 - deterministic behavior smoke tests
+- notebook smoke test for imagined trajectories
 
 Still missing:
 
 - behavior loss helpers with gradient isolation from the world model
-- notebook smoke test for imagined trajectories
 - richer Dreamer-style actor objective details and longer imagined training validation
 
 ## M5
