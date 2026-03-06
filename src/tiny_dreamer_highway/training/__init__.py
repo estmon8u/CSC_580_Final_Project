@@ -18,6 +18,13 @@ from tiny_dreamer_highway.training.checkpointing import (
 	load_checkpoint,
 	save_checkpoint,
 )
+from tiny_dreamer_highway.training.metrics_logging import (
+	append_metrics_csv,
+	append_metrics_jsonl,
+	export_cycle_metrics,
+	flatten_cycle_metrics,
+	write_artifact_summary,
+)
 from tiny_dreamer_highway.training.pipeline import (
 	PipelineCycleMetrics,
 	collect_actor_transitions,
@@ -41,7 +48,11 @@ __all__ = [
 	"collect_actor_transitions",
 	"compute_sequence_world_model_losses",
 	"compute_world_model_losses",
+	"append_metrics_csv",
+	"append_metrics_jsonl",
+	"export_cycle_metrics",
 	"find_latest_checkpoint",
+	"flatten_cycle_metrics",
 	"imagine_trajectory",
 	"load_checkpoint",
 	"run_training_cycle",
@@ -52,4 +63,5 @@ __all__ = [
 	"train_behavior_step",
 	"train_sequence_world_model_step",
 	"train_world_model_step",
+	"write_artifact_summary",
 ]

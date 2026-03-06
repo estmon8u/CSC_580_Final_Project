@@ -91,11 +91,12 @@ Completed baseline work:
 - checkpoint save/load helpers
 - checkpoint smoke tests
 - checkpoint notebook smoke test
+- lightweight metrics export helpers
+- JSONL, CSV, and latest-summary artifact writers
+- metrics logging tests
 
 Still missing:
 
-- lightweight metrics export
-- artifact summaries written alongside training runs
 - n-step prediction evaluation
 - plots, videos, and report-ready artifacts
 
