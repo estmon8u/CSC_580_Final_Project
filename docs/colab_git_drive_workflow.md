@@ -37,6 +37,8 @@ The notebook should not duplicate the full dependency list. Keep notebook instal
 - print versions for quick validation
 - restart the runtime only if Colab had to replace a preloaded package
 
+The current dependency floor is chosen to stay compatible with Colab's default NumPy 2 ecosystem rather than forcing an older NumPy 1.x stack into the runtime.
+
 ## Colab sanity pass
 
 Before training, always verify:
