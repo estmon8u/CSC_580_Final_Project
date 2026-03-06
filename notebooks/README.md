@@ -7,6 +7,10 @@
 
 Use notebooks in this folder for polished experiments, debugging views, and final presentation assets.
 
+Current primary notebook:
+
+- `01_colab_setup_and_smoke_tests.ipynb` for Colab environment setup plus end-to-end smoke validation against pushed package code
+
 Suggested order:
 
 1. environment setup and replay inspection

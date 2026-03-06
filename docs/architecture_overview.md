@@ -44,7 +44,7 @@ The initial phase established the reusable Python package, experiment configurat
   - combined world-model forward pass
   - single-step and short-sequence world-model training helpers
   - reproducibility seeding
-  - Colab setup and smoke-test notebook
+  - combined Colab setup-and-smoke-test notebook
 
 - Next core layers:
   - imagination rollouts in latent space
