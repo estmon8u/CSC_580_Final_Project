@@ -104,10 +104,13 @@ Completed baseline work:
 - visualization tests
 - notebook plot artifact smoke test
 - notebook video artifact smoke test
+- submission bundle helper
+- artifact bundle tests
+- notebook submission bundle smoke test
 
 Still missing:
 
-- final report-ready artifact packaging
+- final report polish and write-up integration
 
 ## Optimization policy
 
