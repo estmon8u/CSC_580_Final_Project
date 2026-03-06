@@ -7,5 +7,6 @@ AI tools consulted: GitHub Copilot
 """
 
 from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
+from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
 
-__all__ = ["LatentState", "ObservationEncoder"]
+__all__ = ["LatentState", "ObservationEncoder", "RecurrentStateSpaceModel"]
