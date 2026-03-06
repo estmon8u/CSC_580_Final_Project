@@ -24,8 +24,18 @@ Use Google Drive for:
 3. commit and push only after tests pass
 4. open Colab and mount Google Drive
 5. clone or pull the repository into the Colab workspace
-6. install the package with editable mode if needed
+6. install the package with `python -m pip install -e .`
 7. run a small sanity pass before expensive cells
+
+## Dependency management
+
+Use [pyproject.toml](../pyproject.toml) as the dependency source of truth.
+
+The notebook should not duplicate the full dependency list. Keep notebook install steps thin:
+
+- install from the repository root
+- print versions for quick validation
+- restart the runtime only if Colab had to replace a preloaded package
 
 ## Colab sanity pass
 

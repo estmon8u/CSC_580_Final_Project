@@ -49,7 +49,7 @@ Recommended loop:
 1. make changes locally in VS Code
 2. run tests before every push
 3. push validated changes to the personal GitHub repository
-4. in Colab, mount Drive, clone or pull the repository, and install the package
+4. in Colab, mount Drive, clone or pull the repository, and install the package from `pyproject.toml` with `python -m pip install -e .`
 5. write checkpoints, videos, and plots to the mounted Drive folder
 
 The notebook should stay thin and call reusable functions from `src/tiny_dreamer_highway/`.
