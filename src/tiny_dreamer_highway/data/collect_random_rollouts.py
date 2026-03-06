@@ -16,9 +16,16 @@ from tiny_dreamer_highway.envs.highway_factory import make_highway_env
 from tiny_dreamer_highway.types import Transition
 
 
-def collect_random_transitions(config: EnvConfig, replay_buffer: ReplayBuffer, steps: int) -> int:
+def collect_random_transitions(
+    config: EnvConfig,
+    replay_buffer: ReplayBuffer,
+    steps: int,
+    seed: int | None = None,
+) -> int:
     env = make_highway_env(config)
-    observation, _ = env.reset()
+    if seed is not None and hasattr(env.action_space, "seed"):
+        env.action_space.seed(seed)
+    observation, _ = env.reset(seed=seed)
     added = 0
 
     try:

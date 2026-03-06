@@ -49,7 +49,7 @@ def run_show_config(config_path: Path) -> str:
 def run_collect_random(config_path: Path, steps: int) -> str:
     config = load_experiment_config(config_path)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
-    added = collect_random_transitions(config.env, replay_buffer, steps=steps)
+    added = collect_random_transitions(config.env, replay_buffer, steps=steps, seed=config.seed)
     return summarize_collection(config, replay_buffer, added)
 
 

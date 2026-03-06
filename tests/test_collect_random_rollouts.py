@@ -7,8 +7,14 @@ from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 
 
 class FakeActionSpace:
+    def __init__(self) -> None:
+        self.last_seed: int | None = None
+
     def sample(self) -> np.ndarray:
         return np.asarray([0.25, -0.5], dtype=np.float32)
+
+    def seed(self, seed: int) -> None:
+        self.last_seed = seed
 
 
 class FakeEnv:
@@ -18,10 +24,10 @@ class FakeEnv:
         self.step_calls = 0
         self.closed = False
 
-    def reset(self):
+    def reset(self, seed: int | None = None):
         self.reset_calls += 1
         observation = np.full((4, 4), self.reset_calls, dtype=np.uint8)
-        return observation, {"reset_calls": self.reset_calls}
+        return observation, {"reset_calls": self.reset_calls, "seed": seed}
 
     def step(self, action: np.ndarray):
         self.step_calls += 1
@@ -43,13 +49,14 @@ def test_collect_random_transitions_adds_expected_steps(monkeypatch: pytest.Monk
     )
 
     replay_buffer = ReplayBuffer(capacity=16)
-    added = collect_random_transitions(EnvConfig(), replay_buffer, steps=5)
+    added = collect_random_transitions(EnvConfig(), replay_buffer, steps=5, seed=7)
 
     assert added == 5
     assert len(replay_buffer) == 5
     assert fake_env.reset_calls == 3
     assert fake_env.step_calls == 5
     assert fake_env.closed is True
+    assert fake_env.action_space.last_seed == 7
 
     first = replay_buffer.transitions[0]
     assert first.observation.dtype == np.uint8
@@ -66,7 +73,7 @@ def test_collect_random_transitions_resets_after_done(monkeypatch: pytest.Monkey
     )
 
     replay_buffer = ReplayBuffer(capacity=16)
-    collect_random_transitions(EnvConfig(), replay_buffer, steps=4)
+    collect_random_transitions(EnvConfig(), replay_buffer, steps=4, seed=7)
 
     done_flags = [transition.done for transition in replay_buffer.transitions]
     assert done_flags == [False, True, False, True]

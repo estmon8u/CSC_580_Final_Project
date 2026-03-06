@@ -67,7 +67,13 @@ def test_summarize_collection_contains_sampling_shapes() -> None:
 def test_run_collect_random_uses_collection_helper(monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
 
-    def fake_collect_random_transitions(env_config, replay_buffer: ReplayBuffer, steps: int) -> int:
+    def fake_collect_random_transitions(
+        env_config,
+        replay_buffer: ReplayBuffer,
+        steps: int,
+        seed: int | None = None,
+    ) -> int:
+        assert seed == 7
         for seed in range(steps):
             replay_buffer.add(
                 Transition(
