@@ -9,6 +9,7 @@ AI tools consulted: GitHub Copilot
 from tiny_dreamer_highway.models.decoder import ObservationDecoder, RewardPredictor
 from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
 from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
+from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOutput
 
 __all__ = [
 	"LatentState",
@@ -16,4 +17,6 @@ __all__ = [
 	"ObservationEncoder",
 	"RecurrentStateSpaceModel",
 	"RewardPredictor",
+	"TinyWorldModel",
+	"WorldModelOutput",
 ]

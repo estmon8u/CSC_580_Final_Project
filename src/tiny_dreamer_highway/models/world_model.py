@@ -1,0 +1,84 @@
+"""Combined world-model forward pass utilities.
+
+Name: Esteban
+Course: CSC 580 AI 2
+Assignment: Final Project — Dream the Road
+AI tools consulted: GitHub Copilot
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import torch
+from torch import Tensor, nn
+
+from tiny_dreamer_highway.models.decoder import ObservationDecoder, RewardPredictor
+from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
+from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
+
+
+@dataclass(slots=True)
+class WorldModelOutput:
+    embedding: Tensor
+    prior_state: LatentState
+    posterior_state: LatentState
+    reconstruction: Tensor
+    predicted_reward: Tensor
+
+
+class TinyWorldModel(nn.Module):
+    def __init__(
+        self,
+        observation_shape: tuple[int, int, int] = (1, 64, 64),
+        action_dim: int = 2,
+        embedding_dim: int = 256,
+        deterministic_dim: int = 128,
+        stochastic_dim: int = 32,
+    ) -> None:
+        super().__init__()
+        channels, height, width = observation_shape
+        self.encoder = ObservationEncoder(
+            in_channels=channels,
+            observation_shape=(height, width),
+            embedding_dim=embedding_dim,
+        )
+        self.rssm = RecurrentStateSpaceModel(
+            action_dim=action_dim,
+            embedding_dim=embedding_dim,
+            deterministic_dim=deterministic_dim,
+            stochastic_dim=stochastic_dim,
+        )
+        latent_dim = deterministic_dim + stochastic_dim
+        self.decoder = ObservationDecoder(latent_dim=latent_dim, output_shape=observation_shape)
+        self.reward_predictor = RewardPredictor(latent_dim=latent_dim)
+
+    def forward(
+        self,
+        observations: Tensor,
+        actions: Tensor,
+        prev_state: LatentState | None = None,
+    ) -> WorldModelOutput:
+        if observations.ndim == 3:
+            observations = observations.unsqueeze(0)
+        if actions.ndim == 1:
+            actions = actions.unsqueeze(0)
+        if observations.shape[0] != actions.shape[0]:
+            raise ValueError("observations and actions must have matching batch dimensions")
+
+        embedding = self.encoder.encode(observations)
+        if prev_state is None:
+            prev_state = self.rssm.initial_state(batch_size=observations.shape[0], device=observations.device)
+
+        prior_state = self.rssm.imagine_step(prev_state, actions)
+        posterior_state = self.rssm.observe_step(prev_state, actions, embedding)
+        latent_features = posterior_state.features
+        reconstruction = self.decoder(latent_features)
+        predicted_reward = self.reward_predictor(latent_features)
+        return WorldModelOutput(
+            embedding=embedding,
+            prior_state=prior_state,
+            posterior_state=posterior_state,
+            reconstruction=reconstruction,
+            predicted_reward=predicted_reward,
+        )
