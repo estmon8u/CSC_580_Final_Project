@@ -59,17 +59,22 @@ Still missing inside M3:
 
 Implement imagination rollouts, actor, critic, and TD-lambda targets.
 
-**Status:** Next major milestone.
+**Status:** In progress.
 
-Planned work:
+Completed baseline work:
 
 - latent imagination rollout helper
 - `Actor` module
 - `Critic` module
 - `td_lambda_returns()`
-- behavior loss helpers with gradient isolation from the world model
+- behavior training helper
 - deterministic behavior smoke tests
+
+Still missing:
+
+- behavior loss helpers with gradient isolation from the world model
 - notebook smoke test for imagined trajectories
+- richer Dreamer-style actor objective details and longer imagined training validation
 
 ## M5
 
