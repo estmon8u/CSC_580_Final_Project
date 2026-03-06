@@ -6,7 +6,14 @@ Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
 """
 
+from tiny_dreamer_highway.models.decoder import ObservationDecoder, RewardPredictor
 from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
 from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
 
-__all__ = ["LatentState", "ObservationEncoder", "RecurrentStateSpaceModel"]
+__all__ = [
+	"LatentState",
+	"ObservationDecoder",
+	"ObservationEncoder",
+	"RecurrentStateSpaceModel",
+	"RewardPredictor",
+]

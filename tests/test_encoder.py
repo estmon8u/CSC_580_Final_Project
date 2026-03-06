@@ -39,3 +39,13 @@ def test_latent_state_requires_at_least_one_tensor() -> None:
 
     with pytest.raises(ValueError, match="at least one tensor"):
         _ = latent.features
+
+
+def test_latent_state_prefers_world_model_features_over_embedding() -> None:
+    latent = LatentState(
+        embedding=torch.randn(2, 256),
+        deterministic=torch.zeros(2, 32),
+        stochastic=torch.ones(2, 16),
+    )
+
+    assert latent.features.shape == (2, 48)

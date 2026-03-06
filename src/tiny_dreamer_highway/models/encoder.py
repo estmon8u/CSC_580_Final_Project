@@ -22,15 +22,14 @@ class LatentState:
 
     @property
     def features(self) -> Tensor:
+        parts = [part for part in (self.stochastic, self.deterministic) if part is not None]
+        if parts:
+            if len(parts) == 1:
+                return parts[0]
+            return torch.cat(parts, dim=-1)
         if self.embedding is not None:
             return self.embedding
-
-        parts = [part for part in (self.stochastic, self.deterministic) if part is not None]
-        if not parts:
-            raise ValueError("LatentState must contain at least one tensor")
-        if len(parts) == 1:
-            return parts[0]
-        return torch.cat(parts, dim=-1)
+        raise ValueError("LatentState must contain at least one tensor")
 
 
 class ObservationEncoder(nn.Module):

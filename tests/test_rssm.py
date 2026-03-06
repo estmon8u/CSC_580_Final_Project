@@ -59,4 +59,4 @@ def test_rssm_rolls_forward_multiple_steps() -> None:
     assert state.stochastic is not None
     assert state.deterministic.shape == (2, 64)
     assert state.stochastic.shape == (2, 16)
-    assert state.features.shape == (2, 64)
+    assert state.features.shape == (2, 80)
