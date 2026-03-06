@@ -100,12 +100,14 @@ Completed baseline work:
 - notebook n-step prediction evaluation smoke test
 - metric plot artifact helper
 - predicted-vs-target comparison grid helper
+- predicted-vs-target comparison video helper
 - visualization tests
 - notebook plot artifact smoke test
+- notebook video artifact smoke test
 
 Still missing:
 
-- videos and final report-ready artifact packaging
+- final report-ready artifact packaging
 
 ## Optimization policy
 

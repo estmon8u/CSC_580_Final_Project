@@ -12,15 +12,21 @@ from tiny_dreamer_highway.evaluation.prediction_eval import (
 	rollout_imagined_observations,
 )
 from tiny_dreamer_highway.evaluation.visualization import (
+	build_prediction_video_frames,
 	export_prediction_artifacts,
+	export_prediction_media_bundle,
+	export_prediction_video,
 	plot_prediction_metrics,
 	save_prediction_comparison_grid,
 )
 
 __all__ = [
+	"build_prediction_video_frames",
 	"compute_frame_metrics",
 	"evaluate_n_step_predictions",
 	"export_prediction_artifacts",
+	"export_prediction_media_bundle",
+	"export_prediction_video",
 	"plot_prediction_metrics",
 	"rollout_imagined_observations",
 	"save_prediction_comparison_grid",

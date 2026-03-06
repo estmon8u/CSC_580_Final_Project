@@ -23,3 +23,4 @@
 - policy acts in `highway-v0`
 - n-step predictions can be compared with actual frames
 - plots and videos are saved into `artifacts/`
+- comparison media can be reused in the final submission bundle

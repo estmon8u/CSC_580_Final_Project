@@ -11,7 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
+import imageio.v2 as imageio
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 
@@ -42,6 +44,16 @@ def _to_display_image(image: Tensor) -> Tensor:
     if normalized.shape[-1] == 1:
         normalized = normalized[..., 0]
     return normalized
+
+
+def _to_uint8_image(image: Tensor) -> np.ndarray:
+    display_image = _to_display_image(image)
+    image_array = (display_image.numpy() * 255.0).round().clip(0, 255).astype(np.uint8)
+    if image_array.ndim == 2:
+        image_array = np.repeat(image_array[..., None], 3, axis=-1)
+    elif image_array.ndim == 3 and image_array.shape[-1] == 1:
+        image_array = np.repeat(image_array, 3, axis=-1)
+    return image_array
 
 
 def plot_prediction_metrics(
@@ -158,3 +170,95 @@ def export_prediction_artifacts(
         "metrics_plot": metrics_plot,
         "comparison_grid": comparison_grid,
     }
+
+
+def build_prediction_video_frames(
+    predicted: Tensor,
+    target: Tensor,
+    *,
+    example_index: int = 0,
+    max_steps: int | None = None,
+) -> list[np.ndarray]:
+    if predicted.ndim != 5 or target.ndim != 5:
+        raise ValueError("predicted and target must have shape (B, T, C, H, W)")
+    if predicted.shape != target.shape:
+        raise ValueError("predicted and target must have matching shapes")
+    if not 0 <= example_index < predicted.shape[0]:
+        raise IndexError("example_index is out of range")
+
+    horizon = predicted.shape[1] if max_steps is None else min(predicted.shape[1], max_steps)
+    if horizon <= 0:
+        raise ValueError("at least one prediction step is required")
+
+    frames: list[np.ndarray] = []
+    for step in range(horizon):
+        target_frame = _to_uint8_image(target[example_index, step])
+        predicted_frame = _to_uint8_image(predicted[example_index, step])
+        error_frame = _to_uint8_image(
+            torch.abs(_normalize_image(predicted[example_index, step]) - _normalize_image(target[example_index, step]))
+        )
+
+        separator = np.full((target_frame.shape[0], 6, 3), 255, dtype=np.uint8)
+        stacked_frame = np.concatenate(
+            [target_frame, separator, predicted_frame, separator, error_frame],
+            axis=1,
+        )
+        frames.append(stacked_frame)
+
+    return frames
+
+
+def export_prediction_video(
+    predicted: Tensor,
+    target: Tensor,
+    output_path: str | Path,
+    *,
+    example_index: int = 0,
+    max_steps: int | None = None,
+    fps: int = 2,
+) -> Path:
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames = build_prediction_video_frames(
+        predicted,
+        target,
+        example_index=example_index,
+        max_steps=max_steps,
+    )
+    imageio.mimsave(path, frames, duration=1.0 / fps, loop=0)
+    return path
+
+
+def export_prediction_media_bundle(
+    step_metrics: Sequence[dict[str, float]],
+    predicted: Tensor,
+    target: Tensor,
+    output_dir: str | Path,
+    *,
+    example_index: int = 0,
+    prefix: str = "n_step_eval",
+    max_steps: int | None = None,
+    fps: int = 2,
+) -> dict[str, Path]:
+    outputs = export_prediction_artifacts(
+        step_metrics,
+        predicted,
+        target,
+        output_dir,
+        example_index=example_index,
+        prefix=prefix,
+        max_steps=max_steps,
+    )
+    video_path = export_prediction_video(
+        predicted,
+        target,
+        Path(output_dir) / f"{prefix}_comparison.gif",
+        example_index=example_index,
+        max_steps=max_steps,
+        fps=fps,
+    )
+    outputs["comparison_video"] = video_path
+    return outputs
