@@ -3,9 +3,8 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# Production training config for highway-v0 Tiny Dreamer.
-# Use this config for real training runs on Colab (GPU recommended).
-# Expected runtime: ~2-4 hours on Colab T4 for 500 cycles.
+# H100-oriented Colab config.
+# Use this only after the sanity run succeeds and a smaller real baseline is stable.
 
 seed: 7
 device: cuda
@@ -20,20 +19,20 @@ env:
     longitudinal: true
     lateral: true
 replay:
-  capacity: 50000
+  capacity: 100000
   sequence_length: 8
-  batch_size: 32
+  batch_size: 128
 training:
-  batch_size: 32
-  imagination_horizon: 15
+  batch_size: 128
+  imagination_horizon: 20
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
-  world_model_updates_per_cycle: 2
-  behavior_updates_per_cycle: 2
+  world_model_updates_per_cycle: 8
+  behavior_updates_per_cycle: 8
   cycles: 500
-  warm_start_steps: 1000
-  policy_steps: 32
+  warm_start_steps: 2000
+  policy_steps: 64
   checkpoint_interval: 25

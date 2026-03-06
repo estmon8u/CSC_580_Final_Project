@@ -44,6 +44,8 @@ class TrainingConfig(BaseModel):
     critic_lr: float = Field(default=8e-5, gt=0.0)
     kl_weight: float = Field(default=1.0, ge=0.0)
     free_nats: float = Field(default=3.0, ge=0.0)
+    world_model_updates_per_cycle: int = Field(default=1, ge=1, le=256)
+    behavior_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     cycles: int = Field(default=10, ge=1, le=1_000_000)
     warm_start_steps: int = Field(default=64, ge=0, le=1_000_000)
     policy_steps: int = Field(default=8, ge=0, le=1_000_000)

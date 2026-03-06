@@ -66,6 +66,8 @@ def initialize_training_state(
     torch.optim.Optimizer,
 ]:
     device = resolve_training_device(config.device)
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
     observation_shape, action_dim = infer_env_shapes(config)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
     world_model = TinyWorldModel(observation_shape=observation_shape, action_dim=action_dim).to(device)

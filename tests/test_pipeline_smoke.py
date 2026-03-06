@@ -136,3 +136,87 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
         "imagined_reward_mean",
         "imagined_value_mean",
     }
+
+
+def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
+    config = ExperimentConfig.model_validate(
+        {
+            "training": {
+                "batch_size": 4,
+                "imagination_horizon": 5,
+                "world_model_updates_per_cycle": 3,
+                "behavior_updates_per_cycle": 2,
+            }
+        }
+    )
+    replay_buffer = ReplayBuffer(capacity=128)
+    world_model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
+    actor = Actor(latent_dim=160, action_dim=2)
+    critic = Critic(latent_dim=160)
+    world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
+
+    for index in range(16):
+        replay_buffer.add(_make_transition(index))
+
+    world_calls = {"count": 0}
+    behavior_calls = {"count": 0}
+
+    def fake_train_world_model_step(*args, **kwargs):
+        world_calls["count"] += 1
+        return None, {
+            "reconstruction_loss": 1.0,
+            "reward_loss": 0.5,
+            "kl_loss": 3.0,
+            "kl_loss_raw": 2.0,
+            "total_loss": 4.5,
+        }
+
+    def fake_seed_latent_state(*args, **kwargs):
+        return world_model.rssm.initial_state(batch_size=4)
+
+    def fake_train_behavior_step(*args, **kwargs):
+        behavior_calls["count"] += 1
+        return {
+            "actor_loss": -0.1,
+            "critic_loss": 0.2,
+            "imagined_reward_mean": 0.3,
+            "imagined_value_mean": 0.4,
+        }
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.train_world_model_step",
+        fake_train_world_model_step,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.seed_latent_state",
+        fake_seed_latent_state,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.train_behavior_step",
+        fake_train_behavior_step,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.collect_actor_transitions",
+        lambda *args, **kwargs: 0,
+    )
+
+    metrics = run_training_cycle(
+        config,
+        replay_buffer,
+        world_model,
+        actor,
+        critic,
+        world_optimizer,
+        actor_optimizer,
+        critic_optimizer,
+        warm_start_steps=0,
+        policy_steps=0,
+        seed=7,
+    )
+
+    assert world_calls["count"] == 3
+    assert behavior_calls["count"] == 2
+    assert metrics.world_model_metrics["total_loss"] == 4.5
+    assert metrics.behavior_metrics["critic_loss"] == 0.2

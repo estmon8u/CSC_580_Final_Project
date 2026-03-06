@@ -27,6 +27,8 @@ training:
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
+  world_model_updates_per_cycle: 1
+  behavior_updates_per_cycle: 1
   cycles: 10
   warm_start_steps: 64
   policy_steps: 8

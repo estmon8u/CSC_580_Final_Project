@@ -33,6 +33,17 @@ class PipelineCycleMetrics:
     behavior_metrics: dict[str, float]
 
 
+def _average_metric_dicts(metrics_list: list[dict[str, float]]) -> dict[str, float]:
+    if not metrics_list:
+        return {}
+
+    keys = metrics_list[0].keys()
+    return {
+        key: float(sum(metrics[key] for metrics in metrics_list) / len(metrics_list))
+        for key in keys
+    }
+
+
 def _observation_to_tensor(observation: np.ndarray) -> Tensor:
     observation_tensor = torch.as_tensor(observation)
     if observation_tensor.ndim == 2:
@@ -136,32 +147,45 @@ def run_training_cycle(
         raise ValueError("replay buffer does not contain enough samples for a training cycle")
 
     training_config: TrainingConfig = config.training
-    batch = replay_buffer.sample_batch(batch_size=batch_size)
     model_device = _module_device(world_model)
-    observations = torch.as_tensor(batch.observations, device=model_device)
-    actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
-    rewards = torch.as_tensor(batch.rewards, dtype=torch.float32, device=model_device)
 
-    _, world_model_metrics = train_world_model_step(
-        world_model,
-        world_model_optimizer,
-        observations,
-        actions,
-        rewards,
-        kl_weight=training_config.kl_weight,
-        free_nats=training_config.free_nats,
-    )
+    world_model_metrics_list: list[dict[str, float]] = []
+    for _ in range(training_config.world_model_updates_per_cycle):
+        batch = replay_buffer.sample_batch(batch_size=batch_size)
+        observations = torch.as_tensor(batch.observations, device=model_device)
+        actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
+        rewards = torch.as_tensor(batch.rewards, dtype=torch.float32, device=model_device)
 
-    start_state = seed_latent_state(world_model, observations, actions)
-    behavior_metrics = train_behavior_step(
-        world_model,
-        actor,
-        critic,
-        actor_optimizer,
-        critic_optimizer,
-        start_state,
-        horizon=training_config.imagination_horizon,
-    )
+        _, world_model_metrics = train_world_model_step(
+            world_model,
+            world_model_optimizer,
+            observations,
+            actions,
+            rewards,
+            kl_weight=training_config.kl_weight,
+            free_nats=training_config.free_nats,
+        )
+        world_model_metrics_list.append(world_model_metrics)
+
+    behavior_metrics_list: list[dict[str, float]] = []
+    for _ in range(training_config.behavior_updates_per_cycle):
+        batch = replay_buffer.sample_batch(batch_size=batch_size)
+        observations = torch.as_tensor(batch.observations, device=model_device)
+        actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
+        start_state = seed_latent_state(world_model, observations, actions)
+        behavior_metrics = train_behavior_step(
+            world_model,
+            actor,
+            critic,
+            actor_optimizer,
+            critic_optimizer,
+            start_state,
+            horizon=training_config.imagination_horizon,
+        )
+        behavior_metrics_list.append(behavior_metrics)
+
+    world_model_metrics = _average_metric_dicts(world_model_metrics_list)
+    behavior_metrics = _average_metric_dicts(behavior_metrics_list)
 
     policy_added = collect_actor_transitions(
         config,
