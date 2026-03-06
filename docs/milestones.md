@@ -97,6 +97,7 @@ Completed baseline work:
 - notebook metrics export smoke test
 - n-step prediction evaluation helpers
 - prediction evaluation tests
+- notebook n-step prediction evaluation smoke test
 
 Still missing:
 
