@@ -53,7 +53,7 @@ Still missing inside M3:
 
 - Dreamer-style KL divergence term
 - free-nats handling
-- richer world-model diagnostics and checkpointing
+- richer world-model diagnostics
 
 ## M4
 
@@ -68,12 +68,12 @@ Completed baseline work:
 - `Critic` module
 - `td_lambda_returns()`
 - behavior training helper
+- behavior update with gradient isolation from the world model
 - deterministic behavior smoke tests
 - notebook smoke test for imagined trajectories
 
 Still missing:
 
-- behavior loss helpers with gradient isolation from the world model
 - richer Dreamer-style actor objective details and longer imagined training validation
 
 ## M5
@@ -82,22 +82,22 @@ Run the alternating train-collect pipeline and export evaluation media.
 
 **Status:** In progress.
 
-Planned work:
-
-- alternating collect → world model train → behavior train → act loop
-- checkpoint save/load
-- metrics export
-- n-step prediction evaluation
-- plots, videos, and report-ready artifacts
-
 Completed baseline work:
 
 - minimal alternating training cycle helper
 - actor-driven environment collection helper
 - pipeline smoke test covering warm start, one world-model update, one behavior update, and policy collection
+- notebook smoke test for the alternating pipeline step
 - checkpoint save/load helpers
 - checkpoint smoke tests
 - checkpoint notebook smoke test
+
+Still missing:
+
+- lightweight metrics export
+- artifact summaries written alongside training runs
+- n-step prediction evaluation
+- plots, videos, and report-ready artifacts
 
 ## Optimization policy
 
