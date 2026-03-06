@@ -95,6 +95,8 @@ Completed baseline work:
 - minimal alternating training cycle helper
 - actor-driven environment collection helper
 - pipeline smoke test covering warm start, one world-model update, one behavior update, and policy collection
+- checkpoint save/load helpers
+- checkpoint smoke tests
 
 ## Optimization policy
 

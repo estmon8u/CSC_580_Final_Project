@@ -12,6 +12,12 @@ from tiny_dreamer_highway.training.behavior_learning import (
 	td_lambda_returns,
 	train_behavior_step,
 )
+from tiny_dreamer_highway.training.checkpointing import (
+	checkpoint_path,
+	find_latest_checkpoint,
+	load_checkpoint,
+	save_checkpoint,
+)
 from tiny_dreamer_highway.training.pipeline import (
 	PipelineCycleMetrics,
 	collect_actor_transitions,
@@ -31,11 +37,15 @@ from tiny_dreamer_highway.training.sequence_world_model_step import (
 __all__ = [
 	"ImaginedTrajectory",
 	"PipelineCycleMetrics",
+	"checkpoint_path",
 	"collect_actor_transitions",
 	"compute_sequence_world_model_losses",
 	"compute_world_model_losses",
+	"find_latest_checkpoint",
 	"imagine_trajectory",
+	"load_checkpoint",
 	"run_training_cycle",
+	"save_checkpoint",
 	"seed_latent_state",
 	"stack_sequence_batch",
 	"td_lambda_returns",
