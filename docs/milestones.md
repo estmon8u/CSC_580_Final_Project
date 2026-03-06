@@ -94,6 +94,7 @@ Completed baseline work:
 - lightweight metrics export helpers
 - JSONL, CSV, and latest-summary artifact writers
 - metrics logging tests
+- notebook metrics export smoke test
 
 Still missing:
 
