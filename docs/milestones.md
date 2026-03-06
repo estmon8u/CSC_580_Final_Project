@@ -80,7 +80,7 @@ Still missing:
 
 Run the alternating train-collect pipeline and export evaluation media.
 
-**Status:** Not started.
+**Status:** In progress.
 
 Planned work:
 
@@ -89,6 +89,12 @@ Planned work:
 - metrics export
 - n-step prediction evaluation
 - plots, videos, and report-ready artifacts
+
+Completed baseline work:
+
+- minimal alternating training cycle helper
+- actor-driven environment collection helper
+- pipeline smoke test covering warm start, one world-model update, one behavior update, and policy collection
 
 ## Optimization policy
 

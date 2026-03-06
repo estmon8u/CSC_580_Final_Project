@@ -12,6 +12,12 @@ from tiny_dreamer_highway.training.behavior_learning import (
 	td_lambda_returns,
 	train_behavior_step,
 )
+from tiny_dreamer_highway.training.pipeline import (
+	PipelineCycleMetrics,
+	collect_actor_transitions,
+	run_training_cycle,
+	seed_latent_state,
+)
 from tiny_dreamer_highway.training.world_model_step import (
 	compute_world_model_losses,
 	train_world_model_step,
@@ -24,9 +30,13 @@ from tiny_dreamer_highway.training.sequence_world_model_step import (
 
 __all__ = [
 	"ImaginedTrajectory",
+	"PipelineCycleMetrics",
+	"collect_actor_transitions",
 	"compute_sequence_world_model_losses",
 	"compute_world_model_losses",
 	"imagine_trajectory",
+	"run_training_cycle",
+	"seed_latent_state",
 	"stack_sequence_batch",
 	"td_lambda_returns",
 	"train_behavior_step",
