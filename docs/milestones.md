@@ -95,10 +95,11 @@ Completed baseline work:
 - JSONL, CSV, and latest-summary artifact writers
 - metrics logging tests
 - notebook metrics export smoke test
+- n-step prediction evaluation helpers
+- prediction evaluation tests
 
 Still missing:
 
-- n-step prediction evaluation
 - plots, videos, and report-ready artifacts
 
 ## Optimization policy
