@@ -136,6 +136,13 @@ def run_training_experiment(
             map_location=resolve_training_device(config.device),
         )
         start_step = int(metadata["step"]) + 1
+    else:
+        # Fresh run — clear stale log files so append-mode CSVs
+        # don't accumulate duplicate rows from previous runs.
+        for stale in ("cycle_metrics.csv", "cycle_metrics.jsonl", "latest_summary.json"):
+            stale_path = log_dir / stale
+            if stale_path.exists():
+                stale_path.unlink()
 
     latest_checkpoint: Path | None = None
     latest_metrics = PipelineCycleMetrics(
