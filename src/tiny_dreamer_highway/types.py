@@ -30,3 +30,12 @@ class ReplayBatch:
     rewards: NDArray[np.float32]
     next_observations: NDArray[np.uint8]
     dones: NDArray[np.bool_]
+
+
+@dataclass(slots=True)
+class ReplaySequenceBatch:
+    observations: NDArray[np.uint8]
+    actions: NDArray[np.float32]
+    rewards: NDArray[np.float32]
+    next_observations: NDArray[np.uint8]
+    dones: NDArray[np.bool_]
