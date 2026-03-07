@@ -31,7 +31,7 @@ class RewardConfig(BaseModel):
     lane_change_reward: float = 0.0
     normalize_reward: bool = True
     reward_speed_range: tuple[float, float] = (20.0, 30.0)
-    offroad_terminal: bool = False
+    offroad_terminal: bool = True
     offroad_penalty: float = Field(default=3.0, ge=0.0)
     steering_penalty: float = Field(default=0.05, ge=0.0)
     steering_change_penalty: float = Field(default=0.1, ge=0.0)
