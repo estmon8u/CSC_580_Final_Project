@@ -59,7 +59,7 @@ The initial phase established the reusable Python package, experiment configurat
   - FlashAdamW fused optimizer support
   - combined Colab setup-and-smoke-test notebook
   - 7 Colab notebooks (smoke test, sanity, baseline, H100, optimized, AMP, screening)
-  - 113 passing tests
+  - full test suite passing
 
 - What is not done yet:
   - sustained end-to-end training runs with confirmed learning progress
@@ -97,7 +97,35 @@ The model architecture, initialization, and training formulas have been aligned 
 - WM posteriors passed directly to behavior learning instead of redundant re-encoding
 - Kaiming uniform weight initialization across all networks
 
-The next project phase is to run training campaigns on H100, inspect learning behavior, and tune the system until the agent and world model show meaningful improvement over random behavior.
+## Dreamer integration phases completed
+
+### Phase 1 — continuation and evaluation alignment
+
+- learned continuation head added to the world model
+- continuation-aware TD($\lambda$) returns and imagination discounts
+- replay sequence sampling fixed to respect episode boundaries
+- periodic real-policy evaluation integrated into training logs
+
+### Phase 2 — probabilistic reward and value learning
+
+- reward predictor converted to a Gaussian likelihood head
+- critic converted to a Gaussian likelihood head
+- world-model reward loss changed from plain MSE to negative log-likelihood
+- critic fitting changed from plain MSE to likelihood training
+
+### Phase 3 — probabilistic observation modeling
+
+- decoder now exposes a fixed-std Gaussian observation distribution
+- reconstruction training now logs observation negative log-likelihood in addition to MSE
+- prediction evaluation, plots, and notebooks now surface observation NLL
+
+### Phase 4 — long-horizon latent consistency
+
+- RSSM overshooting loss added to penalize multi-step prior/posterior drift
+- long-horizon latent rollout consistency metrics added for sanity and screening runs
+- training analysis now shows overshooting metrics alongside world-model losses
+
+At this point, the core implementation phases are complete. Remaining work is primarily experimental: run longer training campaigns, compare configs, decide whether off-road continuation helps, and prepare the final report and artifact bundle.
 
 ## Notebook role
 

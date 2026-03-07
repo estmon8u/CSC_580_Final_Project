@@ -42,7 +42,14 @@ All core components are complete:
 - checkpoint save/load and metrics export
 - n-step prediction evaluation, plots, videos, submission bundles, and observation-NLL reporting
 - AMP (bfloat16) and FlashAdamW support for H100
-- 113 passing tests
+- full test suite passing
+
+## Dreamer integration phases completed
+
+- Phase 1 — learned continuation model, continuation-aware returns, replay sequence fixes, and periodic real-policy evaluation
+- Phase 2 — probabilistic reward and value heads with likelihood-style losses
+- Phase 3 — probabilistic observation decoder and observation negative log-likelihood reporting
+- Phase 4 — latent overshooting / multi-step consistency regularization and latent drift evaluation
 
 Model defaults match the DreamerV1 reference: `embedding_dim=1024`, `deterministic_dim=200`, `stochastic_dim=30`.
 

@@ -17,14 +17,19 @@
 - world model forward pass reconstructs images
 - reward prediction loss decreases on a tiny batch
 - imagined latent rollouts maintain valid shapes
+- continuation prediction loss is finite
+- observation negative log-likelihood is logged alongside reconstruction MSE
+- overshooting KL / latent drift metrics are finite on a short sequence
 
 ## Final checks
 
 - policy acts in `highway-v0`
 - n-step predictions can be compared with actual frames
+- latent rollout consistency can be compared with grounded posterior rollouts
 - plots and videos are saved into `artifacts/`
 - comparison media can be reused in the final submission bundle
 - a manifest and zip bundle can be exported for submission handoff
+- real-policy evaluation includes mean reward and crash rate
 
 ## Final report polish
 

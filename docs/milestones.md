@@ -110,7 +110,7 @@ Run real training experiments, tune the baseline, and analyze learning behavior.
 Completed work:
 
 - baseline training runner with checkpoint/log export
-- DreamerV1 reference implementation comparison and 6-step integration plan
+- DreamerV1 reference implementation comparison and staged integration plan
 - critical TD(λ) return formula fix (was using current-state values, now uses next-state)
 - actor exploration fix (init_std=5.0, mean_scale=5.0, TanhTransform with Jacobian)
 - model capacity aligned to DreamerV1 reference (embedding 1024, det 200, stoch 30)
@@ -119,10 +119,15 @@ Completed work:
 - WM posterior passthrough to behavior learning
 - ModelConfig with all configurable dimensions wired through experiment and evaluation
 - sequence length increased to 32, imagination horizon to 15
+- learned continuation model and continuation-aware returns
+- probabilistic reward and critic heads with likelihood losses
+- probabilistic observation decoder with observation-NLL metrics
+- latent overshooting / multi-step consistency regularization
+- latent rollout consistency evaluation for longer-horizon drift checks
 - AMP (bfloat16) and FlashAdamW support for H100
 - 7 Colab notebooks covering smoke tests through H100 screening
 - 6 YAML config profiles (CPU, production, optimized, H100, H100+AMP, screening)
-- 113 passing tests
+- full test suite passing
 
 Still in progress:
 
@@ -130,6 +135,17 @@ Still in progress:
 - inspection of reward trends and world-model losses
 - comparison of early and late checkpoints
 - determination of whether the agent shows learning progress
+
+## Phase checkpoint summary
+
+Completed coding phases recorded in git:
+
+- Phase 1 — continuation model, continuation-aware returns, replay fixes, evaluation integration
+- Phase 2 — probabilistic reward and value heads
+- Phase 3 — probabilistic observation modeling
+- Phase 4 — latent overshooting consistency
+
+From this point forward, additional phases are optional. The project can shift from implementation phases to experiment phases and final-deliverable phases.
 
 ## M7
 

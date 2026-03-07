@@ -76,11 +76,16 @@ Example YAML files live in `examples/`.
 |---|---|---|
 | `batch_size` | `4` | Number of sequence batches drawn from replay per gradient step. `4` for CPU sanity runs, `256` to saturate H100 memory bandwidth. Range: 1–512. |
 | `imagination_horizon` | `5` | How many future steps the actor/critic "imagine" using the world model during behaviour learning. Longer = better credit assignment, but compounds model errors. Range: 2–64. |
+| `discount` | `0.99` | Discount factor used in continuation-aware TD($\lambda$) returns. Higher values emphasize long-horizon value prediction. |
+| `lambda_` | `0.95` | Trace parameter for TD($\lambda$) returns during behavior learning. Balances between bootstrap-heavy and Monte-Carlo-heavy targets. |
+| `overshooting_horizon` | `3` | How many steps the RSSM should be rolled forward from a posterior seed state when computing latent overshooting consistency. `0` disables the extra loss. |
+| `overshooting_kl_weight` | `0.5` | Weight applied to the multi-step latent overshooting KL term. Larger values force the imagined prior to stay closer to later posterior states. |
 | `world_model_lr` | `3e-4` | Learning rate for the world model optimizer (encoder + RSSM + decoder + reward predictor). 3e-4 is a standard DreamerV1 value. |
 | `actor_lr` | `8e-5` | Learning rate for the actor (policy network). Lower than the world model LR because policy updates depend on world-model gradients — too fast and it chases a moving target. |
 | `critic_lr` | `8e-5` | Learning rate for the critic (value network). Matched to actor LR for stability. |
 | `kl_weight` | `1.0` | Coefficient on the KL-divergence term in the world model loss: `L = recon + reward + β · D_KL`. Controls how much the latent distribution is regularized. Higher = more compressed latent space. |
 | `free_nats` | `3.0` | KL "free bits" threshold. KL values below 3.0 nats are zeroed, preventing the model from over-regularizing when the latent is already compact. Standard DreamerV1 trick. |
+| `continue_loss_weight` | `1.0` | Weight on the learned continuation / not-done prediction loss. |
 | `grad_clip_norm` | `100.0` | Maximum L2 norm for gradient clipping. Prevents exploding gradients during early training. `100.0` is permissive — tighten to `10.0`–`50.0` if you see NaNs. Range: (0, 10000]. |
 | `lr_warmup_steps` | `0` | Number of optimizer steps over which the learning rate linearly ramps from 0 to the configured LR. Prevents large early gradients from destabilizing fresh random weights. `0` = no warmup. Range: 0–10000. |
 | `use_amp` | `false` | Enable Automatic Mixed Precision. When `true`, forward passes run in lower precision (bf16/fp16), roughly doubling throughput on tensor-core GPUs (A100, H100). |
@@ -92,6 +97,16 @@ Example YAML files live in `examples/`.
 | `warm_start_steps` | `64` | Number of random-policy environment steps collected **before** any training begins. Fills the replay buffer with diverse initial data so the first gradient steps see varied transitions. Must be ≥ `batch_size × sequence_length`. Range: 0–1,000,000. |
 | `policy_steps` | `8` | Environment steps collected per cycle using the **current policy** (not random). More steps = more fresh on-policy data per cycle but slower iteration. Range: 0–1,000,000. |
 | `checkpoint_interval` | `5` | Save a model checkpoint every N cycles. Lower = more frequent saves (safer against crashes) but more disk usage. Range: 1–1,000,000. |
+
+---
+
+## `evaluation` — Periodic Real-Policy Evaluation
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `interval` | `0` | Run real-environment policy evaluation every N training cycles. `0` disables periodic evaluation. |
+| `episodes` | `0` | Number of evaluation episodes to run at each evaluation point. |
+| `max_steps` | `200` | Maximum number of real-environment steps per evaluation episode. |
 
 ---
 
@@ -107,12 +122,22 @@ These are parsed into `ModelConfig` inside `ExperimentConfig`.
 | `stochastic_dim` | `30` | Size of the stochastic latent variable sampled by the RSSM posterior/prior. Smaller than the deterministic part — captures irreducible uncertainty. Range: 8–512. |
 | `hidden_dim` | `200` | Hidden layer width for the RSSM prior and posterior MLPs. Range: 32–2048. |
 | `rssm_num_layers` | `2` | Number of hidden layers in the RSSM prior and posterior networks. `2` matches the DreamerV1 reference. Range: 1–4. |
+| `rssm_min_std` | `0.1` | Minimum standard deviation added to RSSM prior/posterior distributions for numerical stability. |
 | `actor_hidden_dim` | `200` | Hidden layer width for the actor (policy) network. Range: 32–2048. |
 | `actor_num_layers` | `2` | Number of hidden layers in the actor MLP. Range: 1–4. |
+| `actor_init_std` | `5.0` | Initial exploration standard deviation used by the tanh-normal actor. |
+| `actor_mean_scale` | `5.0` | Scaling factor applied to the actor mean before the tanh transform. |
+| `actor_min_std` | `1e-4` | Minimum actor standard deviation to avoid collapsed exploration. |
 | `critic_hidden_dim` | `200` | Hidden layer width for the critic (value) network. Range: 32–2048. |
 | `critic_num_layers` | `3` | Number of hidden layers in the critic MLP. `3` matches DreamerV1. Range: 1–6. |
+| `critic_distribution_std` | `1.0` | Fixed standard deviation used by the critic's Gaussian likelihood head. |
+| `observation_distribution_std` | `1.0` | Fixed standard deviation used by the decoder's Gaussian observation model. |
 | `reward_hidden_dim` | `200` | Hidden layer width for the reward predictor head. Range: 32–2048. |
 | `reward_num_layers` | `2` | Number of hidden layers in the reward predictor. Range: 1–4. |
+| `reward_distribution_std` | `1.0` | Fixed standard deviation used by the reward predictor's Gaussian likelihood head. |
+| `use_continue_model` | `true` | Enables the learned continuation / not-done head in the world model. |
+| `continue_hidden_dim` | `200` | Hidden width for the continuation predictor. |
+| `continue_num_layers` | `2` | Number of hidden layers in the continuation predictor. |
 
 The full latent dimension seen by actor, critic, and decoder is `deterministic_dim + stochastic_dim` (default: 230).
 
@@ -128,10 +153,12 @@ A single training cycle executes the following steps in order:
 3. Sample `batch_size` sequences of length `sequence_length`
 4. Run `world_model_updates_per_cycle` gradient steps on the world model
    - Collect posterior latent states from each WM training batch
+   - Optionally apply overshooting consistency across multiple imagined latent steps
 5. Pass WM posteriors as imagination start states for actor/critic
 6. Imagine `imagination_horizon` steps forward for actor/critic
 7. Run `behavior_updates_per_cycle` gradient steps on actor + critic
-8. Every `checkpoint_interval` cycles, save weights to disk
+8. Every `evaluation.interval` cycles, optionally run real-policy evaluation
+9. Every `checkpoint_interval` cycles, save weights to disk
 ```
 
 ---
