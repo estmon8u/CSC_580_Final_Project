@@ -8,6 +8,8 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, optim
@@ -89,6 +91,33 @@ def compute_world_model_losses(
 
 
 # ---------------------------------------------------------------------------
+# Backward + clip + step  (shared helper)
+# ---------------------------------------------------------------------------
+
+def _backward_and_step(
+    loss: Tensor,
+    optimizer: optim.Optimizer,
+    parameters,
+    grad_clip_norm: float,
+    grad_scaler: torch.amp.GradScaler | None = None,
+) -> None:
+    """Backward pass, gradient clipping, and optimizer step.
+
+    Supports an optional :class:`GradScaler` for float16 AMP.
+    """
+    if grad_scaler is not None:
+        grad_scaler.scale(loss).backward()
+        grad_scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_scaler.step(optimizer)
+        grad_scaler.update()
+    else:
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        optimizer.step()
+
+
+# ---------------------------------------------------------------------------
 # Single-step training helper
 # ---------------------------------------------------------------------------
 
@@ -106,25 +135,16 @@ def train_world_model_step(
     amp_context: torch.amp.autocast | None = None,
 ) -> tuple[WorldModelOutput, dict[str, float]]:
     optimizer.zero_grad(set_to_none=True)
-    if amp_context is not None:
-        with amp_context:
-            output = model(observations, actions)
-            losses = compute_world_model_losses(
-                output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
-            )
-    else:
+
+    ctx = amp_context if amp_context is not None else nullcontext()
+    with ctx:
         output = model(observations, actions)
         losses = compute_world_model_losses(
             output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
         )
-    if grad_scaler is not None:
-        grad_scaler.scale(losses["total_loss"]).backward()
-        grad_scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
-        grad_scaler.step(optimizer)
-        grad_scaler.update()
-    else:
-        losses["total_loss"].backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
-        optimizer.step()
+
+    _backward_and_step(
+        losses["total_loss"], optimizer, model.parameters(),
+        grad_clip_norm, grad_scaler,
+    )
     return output, {name: float(value.detach().cpu().item()) for name, value in losses.items()}

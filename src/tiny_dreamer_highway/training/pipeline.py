@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from contextlib import nullcontext
+
 import numpy as np
 import torch
 from torch import Tensor, optim
@@ -70,7 +72,6 @@ def seed_latent_state(
     *,
     amp_context: torch.amp.autocast | None = None,
 ) -> LatentState:
-    from contextlib import nullcontext
     ctx = amp_context if amp_context is not None else nullcontext()
     with torch.no_grad(), ctx:
         output = world_model(observations, actions)

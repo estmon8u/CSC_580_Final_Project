@@ -30,9 +30,24 @@ class ImaginedTrajectory:
     bootstrap: Tensor
 
 
-def _noop_context():
-    """Return a context manager that does nothing (for non-AMP paths)."""
-    return nullcontext()
+def _backward_and_step(
+    loss: Tensor,
+    optimizer: optim.Optimizer,
+    parameters,
+    grad_clip_norm: float,
+    grad_scaler: torch.amp.GradScaler | None = None,
+) -> None:
+    """Backward pass, gradient clipping, and optimizer step."""
+    if grad_scaler is not None:
+        grad_scaler.scale(loss).backward()
+        grad_scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_scaler.step(optimizer)
+        grad_scaler.update()
+    else:
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        optimizer.step()
 
 
 @contextmanager
@@ -155,81 +170,49 @@ def train_behavior_step(
     critic_scaler: torch.amp.GradScaler | None = None,
     amp_context: torch.amp.autocast | None = None,
 ) -> dict[str, float]:
+    _amp = amp_context if amp_context is not None else nullcontext()
+    _action_kw = dict(
+        longitudinal_scale=longitudinal_scale,
+        lateral_scale=lateral_scale,
+        smoothing_factor=smoothing_factor,
+        lateral_control=lateral_control,
+    )
+
+    # --- Actor update: maximise imagined returns ---
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
-    _amp = amp_context if amp_context is not None else _noop_context()
     with _amp, frozen_params(world_model), frozen_params(critic):
-        imagined_for_actor = imagine_trajectory(
-            world_model,
-            actor,
-            critic,
-            start_state,
-            horizon,
-            longitudinal_scale=longitudinal_scale,
-            lateral_scale=lateral_scale,
-            smoothing_factor=smoothing_factor,
-            lateral_control=lateral_control,
+        imagined = imagine_trajectory(
+            world_model, actor, critic, start_state, horizon, **_action_kw,
         )
         actor_returns = td_lambda_returns(
-            imagined_for_actor.rewards,
-            imagined_for_actor.values,
-            bootstrap=imagined_for_actor.bootstrap,
-            discount=discount,
-            lambda_=lambda_,
+            imagined.rewards, imagined.values,
+            bootstrap=imagined.bootstrap, discount=discount, lambda_=lambda_,
         )
         actor_loss = -actor_returns.mean()
 
-    if actor_scaler is not None:
-        actor_scaler.scale(actor_loss).backward()
-        actor_scaler.unscale_(actor_optimizer)
-        torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
-        actor_scaler.step(actor_optimizer)
-        actor_scaler.update()
-    else:
-        actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
-        actor_optimizer.step()
+    _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
 
+    # --- Critic update: fit value function to λ-returns ---
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
     with _amp, frozen_params(world_model), frozen_params(actor):
-        imagined_for_critic = imagine_trajectory(
-            world_model,
-            actor,
-            critic,
-            start_state,
-            horizon,
-            longitudinal_scale=longitudinal_scale,
-            lateral_scale=lateral_scale,
-            smoothing_factor=smoothing_factor,
-            lateral_control=lateral_control,
+        imagined = imagine_trajectory(
+            world_model, actor, critic, start_state, horizon, **_action_kw,
         )
         critic_targets = td_lambda_returns(
-            imagined_for_critic.rewards,
-            imagined_for_critic.values,
-            bootstrap=imagined_for_critic.bootstrap,
-            discount=discount,
-            lambda_=lambda_,
+            imagined.rewards, imagined.values,
+            bootstrap=imagined.bootstrap, discount=discount, lambda_=lambda_,
         ).detach()
-        critic_loss = F.mse_loss(imagined_for_critic.values, critic_targets)
+        critic_loss = F.mse_loss(imagined.values, critic_targets)
 
-    if critic_scaler is not None:
-        critic_scaler.scale(critic_loss).backward()
-        critic_scaler.unscale_(critic_optimizer)
-        torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
-        critic_scaler.step(critic_optimizer)
-        critic_scaler.update()
-    else:
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
-        critic_optimizer.step()
+    _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
-    metrics = {
+    return {
         "actor_loss": float(actor_loss.detach().cpu().item()),
         "critic_loss": float(critic_loss.detach().cpu().item()),
-        "imagined_reward_mean": float(imagined_for_critic.rewards.detach().mean().cpu().item()),
-        "imagined_value_mean": float(imagined_for_critic.values.detach().mean().cpu().item()),
+        "imagined_reward_mean": float(imagined.rewards.detach().mean().cpu().item()),
+        "imagined_value_mean": float(imagined.values.detach().mean().cpu().item()),
     }
-    return metrics
