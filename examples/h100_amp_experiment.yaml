@@ -10,6 +10,7 @@
 #   - Large batch (256) to saturate GPU memory bandwidth
 #   - 16 model/behavior updates per cycle to keep the GPU busy
 #   - Aggressive offroad penalty (3.0) for driving stability
+#   - DreamerV1-reference model dimensions (1024 embedding, 200+30 latent)
 # Expected runtime: ~45-60 min on Colab H100 for 500 cycles.
 
 seed: 7
@@ -40,7 +41,7 @@ env:
     steering_change_penalty: 0.1
 replay:
   capacity: 100000
-  sequence_length: 8
+  sequence_length: 32
   batch_size: 256
 training:
   batch_size: 256
@@ -61,3 +62,15 @@ training:
   warm_start_steps: 1000
   policy_steps: 64
   checkpoint_interval: 25
+model:
+  embedding_dim: 1024
+  deterministic_dim: 200
+  stochastic_dim: 30
+  hidden_dim: 200
+  rssm_num_layers: 2
+  actor_hidden_dim: 200
+  actor_num_layers: 2
+  critic_hidden_dim: 200
+  critic_num_layers: 3
+  reward_hidden_dim: 200
+  reward_num_layers: 2

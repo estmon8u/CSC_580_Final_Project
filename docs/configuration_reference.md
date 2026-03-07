@@ -95,6 +95,29 @@ Example YAML files live in `examples/`.
 
 ---
 
+## `model` — Model Architecture Dimensions
+
+All model dimension defaults match the open-source DreamerV1 reference implementation.
+These are parsed into `ModelConfig` inside `ExperimentConfig`.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `embedding_dim` | `1024` | Output dimension of the CNN encoder. The encoder maps 64×64 grayscale images to a flat vector of this size. Larger = richer visual features at the cost of more parameters. Range: 32–4096. |
+| `deterministic_dim` | `200` | Size of the GRU hidden state in the RSSM. This is the deterministic part of the latent state. Together with `stochastic_dim`, it forms the full latent state used by the actor and critic. Range: 32–2048. |
+| `stochastic_dim` | `30` | Size of the stochastic latent variable sampled by the RSSM posterior/prior. Smaller than the deterministic part — captures irreducible uncertainty. Range: 8–512. |
+| `hidden_dim` | `200` | Hidden layer width for the RSSM prior and posterior MLPs. Range: 32–2048. |
+| `rssm_num_layers` | `2` | Number of hidden layers in the RSSM prior and posterior networks. `2` matches the DreamerV1 reference. Range: 1–4. |
+| `actor_hidden_dim` | `200` | Hidden layer width for the actor (policy) network. Range: 32–2048. |
+| `actor_num_layers` | `2` | Number of hidden layers in the actor MLP. Range: 1–4. |
+| `critic_hidden_dim` | `200` | Hidden layer width for the critic (value) network. Range: 32–2048. |
+| `critic_num_layers` | `3` | Number of hidden layers in the critic MLP. `3` matches DreamerV1. Range: 1–6. |
+| `reward_hidden_dim` | `200` | Hidden layer width for the reward predictor head. Range: 32–2048. |
+| `reward_num_layers` | `2` | Number of hidden layers in the reward predictor. Range: 1–4. |
+
+The full latent dimension seen by actor, critic, and decoder is `deterministic_dim + stochastic_dim` (default: 230).
+
+---
+
 ## Training Cycle Overview
 
 A single training cycle executes the following steps in order:
@@ -104,19 +127,22 @@ A single training cycle executes the following steps in order:
 2. Store them in the replay buffer (size = `capacity`)
 3. Sample `batch_size` sequences of length `sequence_length`
 4. Run `world_model_updates_per_cycle` gradient steps on the world model
-5. Imagine `imagination_horizon` steps forward for actor/critic
-6. Run `behavior_updates_per_cycle` gradient steps on actor + critic
-7. Every `checkpoint_interval` cycles, save weights to disk
+   - Collect posterior latent states from each WM training batch
+5. Pass WM posteriors as imagination start states for actor/critic
+6. Imagine `imagination_horizon` steps forward for actor/critic
+7. Run `behavior_updates_per_cycle` gradient steps on actor + critic
+8. Every `checkpoint_interval` cycles, save weights to disk
 ```
 
 ---
 
 ## Example Profiles
 
-| Profile | YAML | Batch | Cycles | AMP | Notes |
-|---|---|---|---|---|---|
-| CPU sanity | `base_experiment.yaml` | 4 | 10 | off | Quick smoke test on any machine |
-| Colab baseline | `training_run.yaml` | 4 | 10 | off | Short validation run |
-| Optimized | `optimized_experiment.yaml` | — | — | off | Tuned hyperparameters |
-| H100 full | `h100_experiment.yaml` | — | — | off | Large-scale GPU run |
-| H100 + AMP | `h100_amp_experiment.yaml` | 256 | 500 | bf16 | Maximum H100 throughput with FlashAdamW |
+| Profile | YAML | Batch | Seq Len | Cycles | AMP | Model | Notes |
+|---|---|---|---|---|---|---|---|
+| CPU sanity | `base_experiment.yaml` | 4 | 8 | 10 | off | small (128+32) | Quick smoke test on any machine |
+| Colab production | `training_run.yaml` | 32 | 32 | 500 | off | reference | Real training on T4 GPU |
+| Optimized | `optimized_experiment.yaml` | 32 | 32 | 500 | off | reference | AdamW + grad clip + LR warmup |
+| H100 full | `h100_experiment.yaml` | 128 | 32 | 500 | off | reference | Large-scale GPU run |
+| H100 + AMP | `h100_amp_experiment.yaml` | 256 | 32 | 2000 | bf16 | reference | Maximum H100 throughput with FlashAdamW |
+| H100 screening | `h100_screening_experiment.yaml` | 32 | 32 | 800 | bf16 | reference | Safer screening: 24 WM updates, 4 behavior updates |

@@ -17,36 +17,32 @@ A test-first, package-based implementation scaffold for a Dreamer V1-style world
 ## Project structure
 
 - `docs/` architecture notes, milestones, risks, and evaluation checkpoints
-- `examples/` starter experiment configuration files
-- `notebooks/` polished exploratory and presentation notebooks
+- `examples/` experiment configuration files (CPU smoke, production, H100, screening)
+- `notebooks/` polished exploratory and presentation notebooks (01–07)
 - `src/tiny_dreamer_highway/` reusable package code
-- `tests/` fast tests for config, replay, and smoke validation
+- `tests/` fast tests for config, replay, models, pipeline, and behavior
 - `artifacts/` checkpoints, plots, videos, and logs
 
-## Initial milestone
+## Current status
 
-The first implementation milestone focuses on:
+The codebase is a fully tested DreamerV1-style world model for `highway-v0`.
 
-1. project scaffolding
-2. typed experiment configuration
-3. replay buffer implementation
-4. Highway-Env factory setup
-5. fast unit tests
+All core components are complete:
+- typed experiment configuration with `ModelConfig` for tunable model dimensions
+- replay buffer, environment factory, and random rollout collection
+- CNN encoder, RSSM (multi-layer prior/posterior), decoder, reward predictor
+- combined world model with Kaiming initialization
+- actor with TanhTransform, `init_std=5.0`, and `mean_scale=5.0` for exploration
+- critic with configurable depth (default 3 layers)
+- corrected TD(λ) returns using next-state values
+- imagination rollouts with WM posterior passthrough to behavior learning
+- alternating collect/train pipeline
+- checkpoint save/load and metrics export
+- n-step prediction evaluation, plots, videos, and submission bundles
+- AMP (bfloat16) and FlashAdamW support for H100
+- 113 passing tests
 
-## Next steps
-
-1. create the Python environment and install dependencies
-2. run the test suite
-3. implement random rollout collection
-4. add the world model modules
-
-## First real training loop
-
-The project now includes a first baseline training runner so the next phase can move beyond smoke tests.
-
-Per project workflow, actual training runs should be launched from a dedicated Google Colab notebook rather than from local ad hoc terminal commands.
-
-The training runner initializes the replay buffer, world model, actor, and critic, then runs multi-cycle training while writing logs and checkpoints under the chosen artifact directory.
+Model defaults match the DreamerV1 reference: `embedding_dim=1024`, `deterministic_dim=200`, `stochastic_dim=30`.
 
 ## Colab workflow
 
@@ -62,9 +58,14 @@ Recommended loop:
 
 The notebook should stay thin and call reusable functions from `src/tiny_dreamer_highway/`.
 
-Recommended notebook split:
+## Notebook set
 
-- `01_colab_setup_and_smoke_tests.ipynb` for environment setup and smoke validation
-- `02_colab_training_runs.ipynb` for actual training experiments and checkpoint generation
+- `01_colab_setup_and_smoke_tests.ipynb` — environment setup and smoke validation
+- `02_colab_sanity_run.ipynb` — short runner validation job
+- `03_colab_baseline_run.ipynb` — first real baseline comparison run
+- `04_colab_h100_run.ipynb` — larger H100-oriented run
+- `05_colab_optimized_run.ipynb` — optimized comparison (AdamW, grad clipping, LR warm-up)
+- `06_colab_h100_amp_run.ipynb` — H100 + AMP (bfloat16) throughput run
+- `07_colab_screening_run.ipynb` — safer H100 screening with DreamerV1-reference model
 
 See [docs/architecture_overview.md](docs/architecture_overview.md) and [docs/milestones.md](docs/milestones.md) before extending the package.

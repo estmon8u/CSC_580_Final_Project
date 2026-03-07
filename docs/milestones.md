@@ -37,52 +37,45 @@ Completed work:
 
 Implement the world model: encoder, RSSM, reward model, and decoder.
 
-**Status:** Completed at baseline level.
+**Status:** Completed.
 
 Completed work:
 
-- `ObservationEncoder`
-- `RecurrentStateSpaceModel`
-- decoder and reward head
-- combined `TinyWorldModel`
+- `ObservationEncoder` (CNN → 1024-dim embedding)
+- `RecurrentStateSpaceModel` with multi-layer prior/posterior MLPs (default 2 layers)
+- decoder and reward head (configurable layers/hidden dims)
+- combined `TinyWorldModel` with Kaiming uniform weight initialization
+- `ModelConfig` for all configurable model dimensions (DreamerV1-reference defaults)
 - single-step world-model training helper
 - short sequence world-model training helper
+- KL divergence term with free-nats handling
 - notebook smoke tests up through short sequence training
-
-Still missing inside M3:
-
-- Dreamer-style KL divergence term
-- free-nats handling
-- richer world-model diagnostics
 
 ## M4
 
 Implement imagination rollouts, actor, critic, and TD-lambda targets.
 
-**Status:** In progress.
+**Status:** Completed.
 
-Completed baseline work:
+Completed work:
 
 - latent imagination rollout helper
-- `Actor` module
-- `Critic` module
-- `td_lambda_returns()`
+- `Actor` module with TanhTransform distribution (`init_std=5.0`, `mean_scale=5.0`, `min_std=1e-4`)
+- `Critic` module with configurable depth (default 3 hidden layers)
+- `td_lambda_returns()` with corrected next-state value formula
 - behavior training helper
 - behavior update with gradient isolation from the world model
+- WM posterior passthrough to behavior learning (avoids redundant re-encoding)
 - deterministic behavior smoke tests
 - notebook smoke test for imagined trajectories
-
-Still missing:
-
-- richer Dreamer-style actor objective details and longer imagined training validation
 
 ## M5
 
 Run the alternating train-collect pipeline and export evaluation media.
 
-**Status:** In progress.
+**Status:** Completed.
 
-Completed baseline work:
+Completed work:
 
 - minimal alternating training cycle helper
 - actor-driven environment collection helper
@@ -108,27 +101,35 @@ Completed baseline work:
 - artifact bundle tests
 - notebook submission bundle smoke test
 
-Still missing:
-
-- actual multi-iteration training runs on top of the smoke-tested pipeline
-- checkpoint selection based on observed learning behavior
-- evidence that the learned policy improves on the task
-- evaluation on trained checkpoints rather than only smoke-test states
-
 ## M6
 
 Run real training experiments, tune the baseline, and analyze learning behavior.
 
 **Status:** In progress.
 
-Planned work:
+Completed work:
 
 - baseline training runner with checkpoint/log export
-- run longer training jobs and save periodic checkpoints
-- inspect reward trends and world-model losses over time
-- compare early and late checkpoints qualitatively and quantitatively
-- tune stability-sensitive settings such as learning rates, horizon, rollout lengths, and update ratios
-- determine whether minimal baseline improvements are enough before deeper architectural changes
+- DreamerV1 reference implementation comparison and 6-step integration plan
+- critical TD(λ) return formula fix (was using current-state values, now uses next-state)
+- actor exploration fix (init_std=5.0, mean_scale=5.0, TanhTransform with Jacobian)
+- model capacity aligned to DreamerV1 reference (embedding 1024, det 200, stoch 30)
+- multi-layer networks: RSSM 2-layer, critic 3-layer, reward predictor 2-layer
+- Kaiming uniform weight initialization across all networks
+- WM posterior passthrough to behavior learning
+- ModelConfig with all configurable dimensions wired through experiment and evaluation
+- sequence length increased to 32, imagination horizon to 15
+- AMP (bfloat16) and FlashAdamW support for H100
+- 7 Colab notebooks covering smoke tests through H100 screening
+- 6 YAML config profiles (CPU, production, optimized, H100, H100+AMP, screening)
+- 113 passing tests
+
+Still in progress:
+
+- H100 screening run with reference-aligned code
+- inspection of reward trends and world-model losses
+- comparison of early and late checkpoints
+- determination of whether the agent shows learning progress
 
 ## M7
 
@@ -145,13 +146,17 @@ Planned work:
 
 ## Optimization policy
 
-Optional engineering and performance optimizations are intentionally deferred until the baseline pipeline works end to end and initial real training results are available.
+Most engineering and performance optimizations that were previously deferred have been implemented:
 
-Deferred items include:
+- ✅ AMP / autocast (bfloat16 on H100, fp16 with GradScaler on older GPUs)
+- ✅ FlashAdamW fused optimizer
+- ✅ Kaiming weight initialization
+- ✅ Multi-layer networks matching DreamerV1 reference capacity
+- ✅ Configurable model dimensions via `ModelConfig`
+
+Still deferred:
 
 - WandB logging
 - Hydra config management
 - `torch.compile`
-- AMP / autocast
 - prioritized replay
-- extra performance tuning

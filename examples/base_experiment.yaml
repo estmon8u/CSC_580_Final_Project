@@ -2,6 +2,8 @@
 # Course: CSC 580 AI 2
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
+#
+# CPU smoke-test config. Uses small model dimensions for fast local testing.
 
 seed: 7
 device: cpu
@@ -47,3 +49,15 @@ training:
   warm_start_steps: 64
   policy_steps: 8
   checkpoint_interval: 5
+model:
+  embedding_dim: 256
+  deterministic_dim: 128
+  stochastic_dim: 32
+  hidden_dim: 128
+  rssm_num_layers: 1
+  actor_hidden_dim: 64
+  actor_num_layers: 1
+  critic_hidden_dim: 64
+  critic_num_layers: 1
+  reward_hidden_dim: 64
+  reward_num_layers: 1

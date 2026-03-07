@@ -10,6 +10,7 @@
 #   - 50-step LR warm-up (stabilises early noisy gradients)
 # Keeps the same seed, cycles, batch_size and horizon so the
 # comparison isolates the effect of optimizer / stability changes.
+# Uses DreamerV1-reference model dimensions.
 
 seed: 7
 device: cuda
@@ -39,7 +40,7 @@ env:
     steering_change_penalty: 0.1
 replay:
   capacity: 50000
-  sequence_length: 8
+  sequence_length: 32
   batch_size: 32
 training:
   batch_size: 32
@@ -57,3 +58,15 @@ training:
   warm_start_steps: 1000
   policy_steps: 32
   checkpoint_interval: 25
+model:
+  embedding_dim: 1024
+  deterministic_dim: 200
+  stochastic_dim: 30
+  hidden_dim: 200
+  rssm_num_layers: 2
+  actor_hidden_dim: 200
+  actor_num_layers: 2
+  critic_hidden_dim: 200
+  critic_num_layers: 3
+  reward_hidden_dim: 200
+  reward_num_layers: 2

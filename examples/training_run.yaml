@@ -5,6 +5,7 @@
 #
 # Production training config for highway-v0 Tiny Dreamer.
 # Use this config for real training runs on Colab (GPU recommended).
+# Uses DreamerV1-reference model dimensions.
 # Expected runtime: ~2-4 hours on Colab T4 for 500 cycles.
 
 seed: 7
@@ -35,7 +36,7 @@ env:
     steering_change_penalty: 0.1
 replay:
   capacity: 50000
-  sequence_length: 8
+  sequence_length: 32
   batch_size: 32
 training:
   batch_size: 32
@@ -45,9 +46,23 @@ training:
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
+  grad_clip_norm: 100.0
+  lr_warmup_steps: 50
   world_model_updates_per_cycle: 2
   behavior_updates_per_cycle: 2
   cycles: 500
   warm_start_steps: 1000
   policy_steps: 32
   checkpoint_interval: 25
+model:
+  embedding_dim: 1024
+  deterministic_dim: 200
+  stochastic_dim: 30
+  hidden_dim: 200
+  rssm_num_layers: 2
+  actor_hidden_dim: 200
+  actor_num_layers: 2
+  critic_hidden_dim: 200
+  critic_num_layers: 3
+  reward_hidden_dim: 200
+  reward_num_layers: 2
