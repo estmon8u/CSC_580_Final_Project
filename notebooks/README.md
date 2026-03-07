@@ -9,6 +9,8 @@ Use notebooks in this folder for polished experiments, debugging views, and fina
 
 Phase 3 adds probabilistic observation modeling to the world model. The training and evaluation notebooks now surface observation negative log-likelihood alongside the existing MSE/PSNR/SSIM and real-policy metrics.
 
+Replay note: sequence training needs contiguous non-terminal windows. A notebook can still override run length settings, but if it pushes `warm_start_steps` too low relative to `sequence_length` and leaves `offroad_terminal=true`, early random-policy crashes may produce no valid training sequences. The core trainer now auto-collects extra random steps before failing, and the run notebooks print a quick sequence-sampling risk summary before launch.
+
 Current notebook set:
 
 - `01_colab_setup_and_smoke_tests.ipynb` for Colab environment setup plus end-to-end smoke validation against pushed package code

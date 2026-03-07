@@ -67,6 +67,8 @@ Recommended loop:
 
 The notebook should stay thin and call reusable functions from `src/tiny_dreamer_highway/`.
 
+Sequence-sampling note: world-model updates require contiguous replay windows, not just enough raw transitions. If `offroad_terminal=true`, short crash-heavy warm-start episodes can leave the replay buffer with zero valid sequences even when the raw replay size looks large. The trainer now performs an automatic random-data top-up before failing, but notebooks should still avoid aggressive overrides that shrink `warm_start_steps` too far below the intended config.
+
 ## Notebook set
 
 - `01_colab_setup_and_smoke_tests.ipynb` — environment setup and smoke validation

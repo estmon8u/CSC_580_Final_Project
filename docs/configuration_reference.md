@@ -65,7 +65,7 @@ Example YAML files live in `examples/`.
 | Setting | Default | Purpose |
 |---|---|---|
 | `capacity` | `10000` | Maximum transitions stored. Older data is overwritten when full. Larger = more diverse training data but more RAM. H100 config uses 100k to exploit GPU memory. Range: ≥128. |
-| `sequence_length` | `8` | Number of consecutive time-steps sampled as one training sequence. The RSSM processes these sequentially to learn temporal dynamics. Longer sequences capture longer-horizon patterns but use more memory. Range: 2–128. |
+| `sequence_length` | `8` | Number of consecutive time-steps sampled as one training sequence. The RSSM processes these sequentially to learn temporal dynamics. Longer sequences capture longer-horizon patterns but use more memory. This must stay comfortably below realistic episode lengths; otherwise the replay buffer may contain transitions but still have zero valid contiguous windows. Range: 2–128. |
 | `batch_size` | `4` | Number of sequences per training batch when sampling from replay. (In practice this is usually overridden by `training.batch_size`.) Range: 1–512. |
 
 ---
@@ -94,7 +94,7 @@ Example YAML files live in `examples/`.
 | `world_model_updates_per_cycle` | `1` | Gradient steps on the world model per data-collection cycle. `1` = one update per cycle (conservative). `16` = train harder on each batch of collected data, keeping the GPU busy between environment steps. Range: 1–256. |
 | `behavior_updates_per_cycle` | `1` | Gradient steps on the actor + critic per cycle. Same tradeoff — more updates = faster learning but risk overfitting to current replay data. Range: 1–256. |
 | `cycles` | `10` | Total training cycles (outer loop iterations). Each cycle = collect data → train world model → train actor/critic → checkpoint. Sanity runs use 10; real experiments 500+. Range: 1–1,000,000. |
-| `warm_start_steps` | `64` | Number of random-policy environment steps collected **before** any training begins. Fills the replay buffer with diverse initial data so the first gradient steps see varied transitions. Must be ≥ `batch_size × sequence_length`. Range: 0–1,000,000. |
+| `warm_start_steps` | `64` | Number of random-policy environment steps collected **before** any training begins. Fills the replay buffer with diverse initial data so the first gradient steps see varied transitions. A good lower bound is `batch_size × sequence_length`, but episode-boundary resets can require more when `offroad_terminal=true`. The trainer now auto-tops-up random data if the requested warm start still does not produce valid sequences. Range: 0–1,000,000. |
 | `policy_steps` | `8` | Environment steps collected per cycle using the **current policy** (not random). More steps = more fresh on-policy data per cycle but slower iteration. Range: 0–1,000,000. |
 | `checkpoint_interval` | `5` | Save a model checkpoint every N cycles. Lower = more frequent saves (safer against crashes) but more disk usage. Range: 1–1,000,000. |
 

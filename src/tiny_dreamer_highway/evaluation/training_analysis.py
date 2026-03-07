@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -23,20 +24,32 @@ def _float_series(history: list[dict[str, int | float]], key: str) -> list[float
     return [float(row.get(key, float("nan"))) for row in history]
 
 
-def _parse_metric_value(key: str, value: str) -> int | float:
+def _parse_metric_value(key: str | None, value: Any) -> int | float | None:
+    if key is None or value in (None, ""):
+        return None
+    if isinstance(value, list):
+        return None
     if key in INT_FIELDS:
         return int(float(value))
-    return float(value)
+    parsed = float(value)
+    if math.isnan(parsed):
+        return None
+    return parsed
 
 
 def load_cycle_metrics_history(metrics_csv: str | Path) -> list[dict[str, int | float]]:
     path = Path(metrics_csv)
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
-        history = [
-            {key: _parse_metric_value(key, value) for key, value in row.items() if value not in (None, "")}
-            for row in reader
-        ]
+        history = []
+        for row in reader:
+            parsed_row: dict[str, int | float] = {}
+            for key, value in row.items():
+                parsed_value = _parse_metric_value(key, value)
+                if key is not None and parsed_value is not None:
+                    parsed_row[key] = parsed_value
+            if parsed_row:
+                history.append(parsed_row)
     return history
 
 

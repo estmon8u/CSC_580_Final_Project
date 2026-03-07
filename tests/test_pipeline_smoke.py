@@ -249,3 +249,120 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
     assert behavior_calls["count"] == 2
     assert metrics.world_model_metrics["total_loss"] == 4.5
     assert metrics.behavior_metrics["critic_loss"] == 0.2
+
+
+def test_run_training_cycle_auto_tops_up_random_data_until_sequences_exist(monkeypatch) -> None:
+    config = ExperimentConfig.model_validate(
+        {
+            "env": {"max_episode_steps": 10},
+            "training": {
+                "batch_size": 2,
+                "imagination_horizon": 5,
+                "world_model_updates_per_cycle": 1,
+                "behavior_updates_per_cycle": 1,
+            },
+            "replay": {"sequence_length": 4},
+        }
+    )
+    replay_buffer = ReplayBuffer(capacity=128)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
+    world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
+
+    collect_calls = {"count": 0}
+
+    def fake_collect_random_transitions(env_config, buffer, steps: int, seed: int | None = None) -> int:
+        collect_calls["count"] += 1
+        if collect_calls["count"] == 1:
+            for index in range(steps):
+                transition = _make_transition(index)
+                transition = Transition(
+                    observation=transition.observation,
+                    action=transition.action,
+                    reward=transition.reward,
+                    next_observation=transition.next_observation,
+                    done=(index % 2 == 1),
+                )
+                buffer.add(transition)
+            return steps
+
+        for index in range(steps):
+            buffer.add(_make_transition(index + 100))
+        return steps
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.collect_random_transitions",
+        fake_collect_random_transitions,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.collect_actor_transitions",
+        lambda *args, **kwargs: 0,
+    )
+
+    metrics = run_training_cycle(
+        config,
+        replay_buffer,
+        world_model,
+        actor,
+        critic,
+        world_optimizer,
+        actor_optimizer,
+        critic_optimizer,
+        warm_start_steps=4,
+        policy_steps=0,
+        seed=7,
+    )
+
+    assert collect_calls["count"] >= 2
+    assert metrics.warm_start_added > 4
+    assert metrics.replay_size >= metrics.warm_start_added
+
+
+def test_run_training_cycle_rejects_impossible_sequence_length(monkeypatch) -> None:
+    config = ExperimentConfig.model_validate(
+        {
+            "env": {"max_episode_steps": 10},
+            "training": {"batch_size": 2},
+            "replay": {"sequence_length": 12},
+        }
+    )
+    replay_buffer = ReplayBuffer(capacity=32)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
+    world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.collect_random_transitions",
+        lambda *args, **kwargs: 0,
+    )
+
+    try:
+        run_training_cycle(
+            config,
+            replay_buffer,
+            world_model,
+            actor,
+            critic,
+            world_optimizer,
+            actor_optimizer,
+            critic_optimizer,
+            warm_start_steps=0,
+            policy_steps=0,
+            seed=7,
+        )
+    except ValueError as exc:
+        assert "sequence_length=12 exceeds max_episode_steps=10" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for impossible sequence length")

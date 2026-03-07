@@ -56,6 +56,17 @@ Keep Colab notebooks split by purpose:
 - one notebook for setup and smoke validation
 - one notebook for real or fake training runs and checkpoint generation
 
+## Replay sequence guidance
+
+Dreamer world-model updates train on contiguous replay sequences. That means replay readiness depends on episode boundaries, not only on raw buffer size.
+
+- if `sequence_length > max_episode_steps`, training is impossible and should be treated as a configuration error
+- if `offroad_terminal=true`, random warm-start rollouts may end before enough length accumulates for a valid sequence window
+- for short validation jobs, prefer smaller `sequence_length`, smaller batch sizes, and more conservative terminal settings
+- for real runs, keep notebook overrides close to the YAML defaults unless you intentionally want a reduced-data experiment
+
+The core trainer now auto-collects extra random transitions when the requested warm start does not yet yield enough valid sequences. That makes notebook overrides less brittle, but it does not replace sensible run settings.
+
 ## Drive layout suggestion
 
 Use a Drive folder like:

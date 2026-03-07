@@ -1,4 +1,5 @@
 import json
+from csv import DictReader
 from pathlib import Path
 
 from tiny_dreamer_highway.training import (
@@ -88,3 +89,20 @@ def test_export_cycle_metrics_writes_all_artifacts(tmp_path: Path) -> None:
     assert outputs["jsonl"].exists()
     assert outputs["csv"].exists()
     assert outputs["summary"].exists()
+
+
+def test_append_metrics_csv_rewrites_header_when_new_columns_appear(tmp_path: Path) -> None:
+    csv_path = tmp_path / "cycle_metrics.csv"
+
+    append_metrics_csv(csv_path, {"step": 1, "world_model/total_loss": 1.0})
+    append_metrics_csv(
+        csv_path,
+        {"step": 2, "world_model/total_loss": 0.5, "evaluation/mean_reward": 3.0},
+    )
+
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(DictReader(handle))
+
+    assert len(rows) == 2
+    assert rows[0]["evaluation/mean_reward"] == ""
+    assert rows[1]["evaluation/mean_reward"] == "3.0"

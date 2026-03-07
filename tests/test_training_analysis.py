@@ -62,3 +62,20 @@ def test_export_training_history_artifacts_writes_summary_and_plot(tmp_path: Pat
 
     payload = json.loads(outputs["summary"].read_text(encoding="utf-8"))
     assert payload["best_world_model_step"] == 3
+
+
+def test_load_cycle_metrics_history_ignores_overflow_columns_from_old_csv_header(tmp_path: Path) -> None:
+    csv_path = tmp_path / "cycle_metrics.csv"
+    csv_path.write_text(
+        "step,world_model/total_loss\n"
+        "1,0.50\n"
+        "2,0.25,3.5\n",
+        encoding="utf-8",
+    )
+
+    history = load_cycle_metrics_history(csv_path)
+
+    assert history == [
+        {"step": 1, "world_model/total_loss": 0.5},
+        {"step": 2, "world_model/total_loss": 0.25},
+    ]

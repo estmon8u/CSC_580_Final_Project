@@ -70,6 +70,49 @@ def _module_device(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
 
 
+def _ensure_sampleable_replay_sequences(
+    config: ExperimentConfig,
+    replay_buffer: ReplayBuffer,
+    *,
+    batch_size: int,
+    sequence_length: int,
+    seed: int | None,
+) -> int:
+    if replay_buffer.can_sample(batch_size=batch_size, sequence_length=sequence_length):
+        return 0
+
+    max_episode_steps = int(config.env.max_episode_steps)
+    if sequence_length > max_episode_steps:
+        raise ValueError(
+            "replay sequence sampling is impossible with the current configuration: "
+            f"sequence_length={sequence_length} exceeds max_episode_steps={max_episode_steps}. "
+            "Reduce sequence_length or increase the episode horizon before training."
+        )
+
+    collection_chunk = max(sequence_length, min(max_episode_steps, batch_size * sequence_length))
+    max_extra_steps = max(collection_chunk * 4, max_episode_steps * 4)
+    extra_added = 0
+    attempt = 0
+
+    while (
+        extra_added < max_extra_steps
+        and not replay_buffer.can_sample(batch_size=batch_size, sequence_length=sequence_length)
+    ):
+        remaining = max_extra_steps - extra_added
+        steps = min(collection_chunk, remaining)
+        if steps <= 0:
+            break
+        extra_added += collect_random_transitions(
+            config.env,
+            replay_buffer,
+            steps=steps,
+            seed=None if seed is None else seed + 10_000 + attempt,
+        )
+        attempt += 1
+
+    return extra_added
+
+
 def seed_latent_state(
     world_model: TinyWorldModel,
     observations: Tensor,
@@ -178,12 +221,22 @@ def run_training_cycle(
 
     batch_size = config.training.batch_size
     sequence_length = config.replay.sequence_length
+    warm_start_added += _ensure_sampleable_replay_sequences(
+        config,
+        replay_buffer,
+        batch_size=batch_size,
+        sequence_length=sequence_length,
+        seed=seed,
+    )
     if not replay_buffer.can_sample(batch_size=batch_size, sequence_length=sequence_length):
+        valid_sequences = len(replay_buffer.valid_sequence_start_indices(sequence_length))
         raise ValueError(
-            "replay buffer does not yet contain a full valid training sequence "
-            f"(sequence_length={sequence_length}, replay_size={len(replay_buffer)}). "
-            "Increase warm_start_steps, reduce sequence_length/batch_size for sanity runs, "
-            "or relax terminal settings so episodes last longer."
+            "replay buffer does not yet contain enough valid contiguous training sequences "
+            f"(sequence_length={sequence_length}, replay_size={len(replay_buffer)}, "
+            f"valid_sequences={valid_sequences}, warm_start_added={warm_start_added}). "
+            "The trainer already tried topping up random warm-start data. Increase warm_start_steps, "
+            "reduce sequence_length/batch_size for short validation runs, or relax terminal settings "
+            "so more episodes survive long enough to produce contiguous replay windows."
         )
 
     training_config: TrainingConfig = config.training
