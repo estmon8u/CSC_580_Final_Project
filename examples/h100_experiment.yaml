@@ -29,13 +29,13 @@ env:
     lane_change_reward: 0.0
     normalize_reward: true
     reward_speed_range: [20.0, 30.0]
-    offroad_terminal: true
+    offroad_terminal: false
     offroad_penalty: 3.0
     steering_penalty: 0.05
     steering_change_penalty: 0.1
 replay:
   capacity: 100000
-  sequence_length: 32
+  sequence_length: 16
   batch_size: 128
 training:
   batch_size: 128
