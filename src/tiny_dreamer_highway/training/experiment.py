@@ -7,8 +7,6 @@ AI tools consulted: GitHub Copilot
 """
 
 from __future__ import annotations
-
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -58,16 +56,8 @@ def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], in
 def _make_optimizer(
     params,
     lr: float,
-    *,
-    use_flash: bool = False,
 ) -> torch.optim.Optimizer:
-    """Create an AdamW optimizer, preferring FlashAdamW on Linux+CUDA when requested."""
-    if use_flash:
-        try:
-            from flashoptim import FlashAdamW  # type: ignore[import-untyped]
-            return FlashAdamW(params, lr=lr)
-        except ImportError:
-            pass
+    """Create an AdamW optimizer."""
     return torch.optim.AdamW(params, lr=lr)
 
 
@@ -105,14 +95,12 @@ def initialize_training_state(
     actor = Actor(latent_dim=latent_dim, action_dim=action_dim).to(device)
     critic = Critic(latent_dim=latent_dim).to(device)
 
-    use_flash = config.training.use_flash_optimizer and device.type == "cuda" and sys.platform == "linux"
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,
-        use_flash=use_flash,
     )
-    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr, use_flash=use_flash)
-    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr, use_flash=use_flash)
+    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr)
+    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr)
     return (
         replay_buffer,
         world_model,

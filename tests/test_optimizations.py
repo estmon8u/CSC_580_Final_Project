@@ -1,4 +1,4 @@
-"""Tests for training optimizations: gradient clipping, AdamW, FlashAdamW fallback, LR warm-up.
+"""Tests for training optimizations: gradient clipping, AdamW, LR warm-up.
 
 Name: Esteban
 Course: CSC 580 AI 2
@@ -94,25 +94,14 @@ def test_grad_clip_norm_actually_limits_gradient_magnitude() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AdamW / FlashAdamW fallback tests
+# AdamW tests
 # ---------------------------------------------------------------------------
 
 def test_make_optimizer_returns_adamw_by_default() -> None:
-    """When use_flash=False, _make_optimizer should return torch.optim.AdamW."""
+    """_make_optimizer should return torch.optim.AdamW."""
     params = [torch.nn.Parameter(torch.randn(3))]
-    optimizer = _make_optimizer(params, lr=1e-3, use_flash=False)
+    optimizer = _make_optimizer(params, lr=1e-3)
     assert isinstance(optimizer, torch.optim.AdamW)
-
-
-def test_make_optimizer_falls_back_to_adamw_when_flash_unavailable() -> None:
-    """When FlashAdamW is not installed, use_flash=True should still return AdamW."""
-    params = [torch.nn.Parameter(torch.randn(3))]
-    # On Windows / when flashoptim isn't installed, this should gracefully fall back
-    optimizer = _make_optimizer(params, lr=3e-4, use_flash=True)
-    # It's either FlashAdamW (if installed) or AdamW (fallback)
-    assert isinstance(optimizer, torch.optim.Optimizer)
-    # Verify the LR was set correctly
-    assert optimizer.defaults["lr"] == 3e-4
 
 
 def test_make_optimizer_preserves_learning_rate() -> None:
@@ -197,11 +186,6 @@ def test_grad_clip_norm_config_default() -> None:
     assert config.grad_clip_norm == 100.0
 
 
-def test_use_flash_optimizer_config_default() -> None:
-    config = TrainingConfig()
-    assert config.use_flash_optimizer is False
-
-
 def test_lr_warmup_steps_config_default() -> None:
     config = TrainingConfig()
     assert config.lr_warmup_steps == 0
@@ -212,12 +196,10 @@ def test_config_accepts_optimization_fields_from_dict() -> None:
     config = ExperimentConfig.model_validate({
         "training": {
             "grad_clip_norm": 50.0,
-            "use_flash_optimizer": True,
             "lr_warmup_steps": 25,
         }
     })
     assert config.training.grad_clip_norm == 50.0
-    assert config.training.use_flash_optimizer is True
     assert config.training.lr_warmup_steps == 25
 
 

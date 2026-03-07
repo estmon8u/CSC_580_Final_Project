@@ -48,7 +48,6 @@ class TrainingConfig(BaseModel):
     kl_weight: float = Field(default=1.0, ge=0.0)
     free_nats: float = Field(default=3.0, ge=0.0)
     grad_clip_norm: float = Field(default=100.0, gt=0.0, le=10_000.0)
-    use_flash_optimizer: bool = Field(default=False)
     lr_warmup_steps: int = Field(default=0, ge=0, le=10_000)
     world_model_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     behavior_updates_per_cycle: int = Field(default=1, ge=1, le=256)

@@ -153,6 +153,5 @@ Deferred items include:
 - Hydra config management
 - `torch.compile`
 - AMP / autocast
-- `FlashAdamW` / `flashoptim`
 - prioritized replay
 - extra performance tuning

@@ -7,7 +7,6 @@
 # Changes over training_run.yaml:
 #   - AdamW instead of Adam (better weight decay handling)
 #   - Gradient clipping at 100.0 (prevents NaN from GRU unrolling)
-#   - FlashAdamW on Linux+CUDA (lower optimizer memory footprint)
 #   - 50-step LR warm-up (stabilises early noisy gradients)
 # Keeps the same seed, cycles, batch_size and horizon so the
 # comparison isolates the effect of optimizer / stability changes.
@@ -40,7 +39,6 @@ training:
   kl_weight: 1.0
   free_nats: 3.0
   grad_clip_norm: 100.0
-  use_flash_optimizer: true
   lr_warmup_steps: 50
   world_model_updates_per_cycle: 2
   behavior_updates_per_cycle: 2
