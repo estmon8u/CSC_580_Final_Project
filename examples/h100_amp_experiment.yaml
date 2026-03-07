@@ -57,7 +57,7 @@ training:
   use_flash_optimizer: true
   world_model_updates_per_cycle: 16
   behavior_updates_per_cycle: 16
-  cycles: 500
+  cycles: 2000
   warm_start_steps: 1000
   policy_steps: 64
   checkpoint_interval: 25
