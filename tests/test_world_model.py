@@ -1,6 +1,7 @@
 import torch
 
 from tiny_dreamer_highway.models import TinyWorldModel
+from tiny_dreamer_highway.models.world_model import WorldModelOutput
 from tiny_dreamer_highway.training import compute_world_model_losses, gaussian_kl_divergence, train_world_model_step
 
 
@@ -38,7 +39,7 @@ def test_compute_world_model_losses_returns_expected_keys() -> None:
     rewards = torch.randn(3)
 
     output = model(observations, actions)
-    losses = compute_world_model_losses(output, observations, rewards, target_dones=torch.zeros(3))
+    losses = compute_world_model_losses(output, observations, rewards, target_terminals=torch.zeros(3))
 
     assert set(losses.keys()) == {
         "reconstruction_loss",
@@ -68,6 +69,42 @@ def test_reward_predictor_distribution_matches_batch_shape() -> None:
     log_prob = reward_dist.log_prob(torch.randn(3, 1))
 
     assert log_prob.shape == (3,)
+
+
+def test_compute_world_model_losses_uses_terminal_flags_not_truncation_boundaries() -> None:
+    model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    observations = torch.randint(0, 256, (2, 1, 64, 64), dtype=torch.uint8)
+    actions = torch.randn(2, 2)
+    rewards = torch.zeros(2)
+    output = model(observations, actions)
+    output = WorldModelOutput(
+        embedding=output.embedding,
+        prior_state=output.prior_state,
+        posterior_state=output.posterior_state,
+        reconstruction=output.reconstruction,
+        predicted_reward=output.predicted_reward,
+        predicted_observation_std=output.predicted_observation_std,
+        predicted_reward_std=output.predicted_reward_std,
+        predicted_continue=torch.full((2, 1), 4.0),
+    )
+
+    non_terminal_loss = compute_world_model_losses(
+        output,
+        observations,
+        rewards,
+        target_terminals=torch.zeros(2),
+    )
+    terminal_loss = compute_world_model_losses(
+        output,
+        observations,
+        rewards,
+        target_terminals=torch.ones(2),
+    )
+
+    assert non_terminal_loss["continue_loss"] < terminal_loss["continue_loss"]
 
 
 def test_train_world_model_step_runs_optimizer_step() -> None:

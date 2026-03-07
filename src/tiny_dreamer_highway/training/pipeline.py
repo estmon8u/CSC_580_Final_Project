@@ -178,6 +178,8 @@ def collect_actor_transitions(
                     reward=float(reward),
                     next_observation=np.asarray(next_observation, dtype=np.uint8),
                     done=done,
+                    terminated=bool(terminated),
+                    truncated=bool(truncated),
                 )
             )
             added += 1
@@ -260,7 +262,7 @@ def run_training_cycle(
             observations,
             actions,
             rewards,
-            dones=torch.as_tensor(seq_batch.dones, dtype=torch.float32, device=model_device),
+            terminals=torch.as_tensor(seq_batch.terminals, dtype=torch.float32, device=model_device),
             kl_weight=training_config.kl_weight,
             free_nats=training_config.free_nats,
             continue_loss_weight=training_config.continue_loss_weight,

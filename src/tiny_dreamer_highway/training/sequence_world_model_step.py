@@ -106,12 +106,16 @@ def stack_sequence_batch(sequences: list[list[Transition]]) -> ReplaySequenceBat
     rewards = []
     next_observations = []
     dones = []
+    terminals = []
+    truncations = []
     for sequence in sequences:
         observations.append([transition.observation for transition in sequence])
         actions.append([transition.action for transition in sequence])
         rewards.append([transition.reward for transition in sequence])
         next_observations.append([transition.next_observation for transition in sequence])
         dones.append([transition.done for transition in sequence])
+        terminals.append([transition.terminated for transition in sequence])
+        truncations.append([transition.truncated for transition in sequence])
 
     return ReplaySequenceBatch(
         observations=np.asarray(observations, dtype=np.uint8),
@@ -119,6 +123,8 @@ def stack_sequence_batch(sequences: list[list[Transition]]) -> ReplaySequenceBat
         rewards=np.asarray(rewards, dtype=np.float32),
         next_observations=np.asarray(next_observations, dtype=np.uint8),
         dones=np.asarray(dones, dtype=np.bool_),
+        terminals=np.asarray(terminals, dtype=np.bool_),
+        truncations=np.asarray(truncations, dtype=np.bool_),
     )
 
 
@@ -129,6 +135,7 @@ def compute_sequence_world_model_losses(
     rewards: Tensor,
     *,
     dones: Tensor | None = None,
+    terminals: Tensor | None = None,
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
@@ -141,6 +148,8 @@ def compute_sequence_world_model_losses(
         raise ValueError("actions must have shape (B, T, action_dim)")
     if rewards.ndim != 2:
         raise ValueError("rewards must have shape (B, T)")
+
+    terminal_targets = terminals if terminals is not None else dones
 
     batch_size, sequence_length = observations.shape[:2]
     state: LatentState | None = None
@@ -159,7 +168,7 @@ def compute_sequence_world_model_losses(
             output,
             observations[:, step],
             rewards[:, step],
-            target_dones=None if dones is None else dones[:, step],
+            target_terminals=None if terminal_targets is None else terminal_targets[:, step],
             kl_weight=1.0, free_nats=free_nats,
             continue_loss_weight=continue_loss_weight,
         )
@@ -216,6 +225,7 @@ def train_sequence_world_model_step(
     rewards: Tensor,
     *,
     dones: Tensor | None = None,
+    terminals: Tensor | None = None,
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
@@ -232,6 +242,7 @@ def train_sequence_world_model_step(
         outputs, losses = compute_sequence_world_model_losses(
             model, observations, actions, rewards,
             dones=dones,
+            terminals=terminals,
             kl_weight=kl_weight,
             free_nats=free_nats,
             continue_loss_weight=continue_loss_weight,

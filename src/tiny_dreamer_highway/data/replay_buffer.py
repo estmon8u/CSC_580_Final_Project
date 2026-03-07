@@ -78,6 +78,8 @@ class ReplayBuffer:
             rewards=np.asarray([item.reward for item in selected], dtype=np.float32),
             next_observations=np.stack([item.next_observation for item in selected]).astype(np.uint8),
             dones=np.asarray([item.done for item in selected], dtype=np.bool_),
+            terminals=np.asarray([item.terminated for item in selected], dtype=np.bool_),
+            truncations=np.asarray([item.truncated for item in selected], dtype=np.bool_),
         )
 
     def sample_sequences(self, batch_size: int, sequence_length: int) -> list[list[Transition]]:

@@ -36,6 +36,22 @@ def test_stack_sequence_batch_returns_expected_shapes() -> None:
     assert batch.rewards.shape == (2, 4)
     assert batch.next_observations.shape == (2, 4, 1, 64, 64)
     assert batch.dones.shape == (2, 4)
+    assert batch.terminals.shape == (2, 4)
+    assert batch.truncations.shape == (2, 4)
+
+
+def test_stack_sequence_batch_preserves_terminal_and_truncation_flags() -> None:
+    sequence = [make_sequence_transition(seed) for seed in range(3)]
+    sequence[1].done = True
+    sequence[1].truncated = True
+    sequence[2].done = True
+    sequence[2].terminated = True
+
+    batch = stack_sequence_batch([sequence])
+
+    assert batch.dones.tolist() == [[False, True, True]]
+    assert batch.terminals.tolist() == [[False, False, True]]
+    assert batch.truncations.tolist() == [[False, True, False]]
 
 
 def test_compute_sequence_world_model_losses_returns_outputs_per_step() -> None:

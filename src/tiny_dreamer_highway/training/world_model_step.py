@@ -50,6 +50,7 @@ def compute_world_model_losses(
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     target_dones: Tensor | None = None,
+    target_terminals: Tensor | None = None,
     continue_loss_weight: float = 1.0,
 ) -> dict[str, Tensor]:
     observations_are_bytes = target_observations.dtype == torch.uint8
@@ -73,8 +74,9 @@ def compute_world_model_losses(
     )
     reward_loss = -reward_dist.log_prob(reward_targets).mean()
     continue_loss = torch.zeros((), device=target_observations.device, dtype=reward_loss.dtype)
-    if output.predicted_continue is not None and target_dones is not None:
-        continue_targets = (1.0 - target_dones.reshape(-1, 1).to(dtype=output.predicted_continue.dtype))
+    terminal_targets = target_terminals if target_terminals is not None else target_dones
+    if output.predicted_continue is not None and terminal_targets is not None:
+        continue_targets = (1.0 - terminal_targets.reshape(-1, 1).to(dtype=output.predicted_continue.dtype))
         continue_loss = F.binary_cross_entropy_with_logits(
             output.predicted_continue,
             continue_targets,
@@ -159,6 +161,7 @@ def train_world_model_step(
     rewards: Tensor,
     *,
     dones: Tensor | None = None,
+    terminals: Tensor | None = None,
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
@@ -178,6 +181,7 @@ def train_world_model_step(
             kl_weight=kl_weight,
             free_nats=free_nats,
             target_dones=dones,
+            target_terminals=terminals,
             continue_loss_weight=continue_loss_weight,
         )
 

@@ -40,6 +40,8 @@ def collect_random_transitions(
                     reward=float(reward),
                     next_observation=np.asarray(next_observation, dtype=np.uint8),
                     done=done,
+                    terminated=bool(terminated),
+                    truncated=bool(truncated),
                 )
             )
             added += 1

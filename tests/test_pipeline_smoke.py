@@ -48,6 +48,8 @@ def _make_transition(seed: int) -> Transition:
         reward=float(seed) / 10.0,
         next_observation=np.full((1, 64, 64), seed + 1, dtype=np.uint8),
         done=False,
+        terminated=False,
+        truncated=False,
     )
 
 
@@ -288,6 +290,8 @@ def test_run_training_cycle_auto_tops_up_random_data_until_sequences_exist(monke
                     reward=transition.reward,
                     next_observation=transition.next_observation,
                     done=(index % 2 == 1),
+                    terminated=False,
+                    truncated=(index % 2 == 1),
                 )
                 buffer.add(transition)
             return steps

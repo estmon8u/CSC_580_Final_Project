@@ -21,6 +21,8 @@ class Transition:
     reward: float
     next_observation: NDArray[np.uint8]
     done: bool
+    terminated: bool = False
+    truncated: bool = False
 
 
 @dataclass(slots=True)
@@ -30,6 +32,8 @@ class ReplayBatch:
     rewards: NDArray[np.float32]
     next_observations: NDArray[np.uint8]
     dones: NDArray[np.bool_]
+    terminals: NDArray[np.bool_]
+    truncations: NDArray[np.bool_]
 
 
 @dataclass(slots=True)
@@ -39,3 +43,5 @@ class ReplaySequenceBatch:
     rewards: NDArray[np.float32]
     next_observations: NDArray[np.uint8]
     dones: NDArray[np.bool_]
+    terminals: NDArray[np.bool_]
+    truncations: NDArray[np.bool_]
