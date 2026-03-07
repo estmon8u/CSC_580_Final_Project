@@ -24,6 +24,19 @@ class ActionConfig(BaseModel):
     smoothing_factor: float = Field(default=0.6, ge=0.0, lt=1.0)
 
 
+class RewardConfig(BaseModel):
+    collision_reward: float = -1.0
+    right_lane_reward: float = 0.1
+    high_speed_reward: float = 0.4
+    lane_change_reward: float = 0.0
+    normalize_reward: bool = True
+    reward_speed_range: tuple[float, float] = (20.0, 30.0)
+    offroad_terminal: bool = False
+    offroad_penalty: float = Field(default=3.0, ge=0.0)
+    steering_penalty: float = Field(default=0.05, ge=0.0)
+    steering_change_penalty: float = Field(default=0.1, ge=0.0)
+
+
 class EnvConfig(BaseModel):
     env_id: str = "highway-v0"
     observation_height: int = Field(default=64, ge=32, le=256)
@@ -31,6 +44,7 @@ class EnvConfig(BaseModel):
     frame_stack: int = Field(default=1, ge=1, le=4)
     max_episode_steps: int = Field(default=40, ge=10, le=500)
     action: ActionConfig = Field(default_factory=ActionConfig)
+    reward: RewardConfig = Field(default_factory=RewardConfig)
 
 
 class ReplayConfig(BaseModel):
@@ -49,6 +63,9 @@ class TrainingConfig(BaseModel):
     free_nats: float = Field(default=3.0, ge=0.0)
     grad_clip_norm: float = Field(default=100.0, gt=0.0, le=10_000.0)
     lr_warmup_steps: int = Field(default=0, ge=0, le=10_000)
+    use_amp: bool = False
+    amp_dtype: Literal["bfloat16", "float16"] = "bfloat16"
+    use_flash_optimizer: bool = False
     world_model_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     behavior_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     cycles: int = Field(default=10, ge=1, le=1_000_000)

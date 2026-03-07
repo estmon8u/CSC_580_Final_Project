@@ -102,13 +102,29 @@ def train_world_model_step(
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     grad_clip_norm: float = 100.0,
+    grad_scaler: torch.amp.GradScaler | None = None,
+    amp_context: torch.amp.autocast | None = None,
 ) -> tuple[WorldModelOutput, dict[str, float]]:
     optimizer.zero_grad(set_to_none=True)
-    output = model(observations, actions)
-    losses = compute_world_model_losses(
-        output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
-    )
-    losses["total_loss"].backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
-    optimizer.step()
+    if amp_context is not None:
+        with amp_context:
+            output = model(observations, actions)
+            losses = compute_world_model_losses(
+                output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
+            )
+    else:
+        output = model(observations, actions)
+        losses = compute_world_model_losses(
+            output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
+        )
+    if grad_scaler is not None:
+        grad_scaler.scale(losses["total_loss"]).backward()
+        grad_scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+        grad_scaler.step(optimizer)
+        grad_scaler.update()
+    else:
+        losses["total_loss"].backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+        optimizer.step()
     return output, {name: float(value.detach().cpu().item()) for name, value in losses.items()}

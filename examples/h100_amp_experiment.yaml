@@ -3,8 +3,14 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# H100-oriented Colab config.
-# Use this only after the sanity run succeeds and a smaller real baseline is stable.
+# H100 + AMP (bfloat16) + FlashAdamW config.
+# Maximises H100 throughput with:
+#   - bf16 automatic mixed precision (native H100 tensor-core dtype)
+#   - FlashAdamW fused optimizer (optional; falls back to AdamW)
+#   - Large batch (256) to saturate GPU memory bandwidth
+#   - 16 model/behavior updates per cycle to keep the GPU busy
+#   - Aggressive offroad penalty (3.0) for driving stability
+# Expected runtime: ~45-60 min on Colab H100 for 500 cycles.
 
 seed: 7
 device: cuda
@@ -35,17 +41,22 @@ env:
 replay:
   capacity: 100000
   sequence_length: 8
-  batch_size: 128
+  batch_size: 256
 training:
-  batch_size: 128
+  batch_size: 256
   imagination_horizon: 20
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
-  world_model_updates_per_cycle: 8
-  behavior_updates_per_cycle: 8
+  grad_clip_norm: 100.0
+  lr_warmup_steps: 50
+  use_amp: true
+  amp_dtype: bfloat16
+  use_flash_optimizer: true
+  world_model_updates_per_cycle: 16
+  behavior_updates_per_cycle: 16
   cycles: 500
   warm_start_steps: 2000
   policy_steps: 64

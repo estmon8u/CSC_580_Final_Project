@@ -19,7 +19,7 @@ from tiny_dreamer_highway.envs.highway_factory import make_highway_env
 from tiny_dreamer_highway.models import Actor, Critic, TinyWorldModel
 from tiny_dreamer_highway.training.checkpointing import load_checkpoint, save_checkpoint
 from tiny_dreamer_highway.training.metrics_logging import export_cycle_metrics, flatten_cycle_metrics
-from tiny_dreamer_highway.training.pipeline import PipelineCycleMetrics, run_training_cycle
+from tiny_dreamer_highway.training.pipeline import PipelineCycleMetrics, resolve_amp_dtype, run_training_cycle
 from tiny_dreamer_highway.utils import set_global_seeds
 
 
@@ -53,11 +53,33 @@ def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], in
     return observation_shape, action_dim
 
 
+def _try_flash_adamw(
+    params,
+    lr: float,
+) -> torch.optim.Optimizer | None:
+    """Try to create a FlashAdamW optimizer (Linux + CUDA only).
+
+    Returns *None* when the package is not installed or the platform
+    is unsupported, so callers can fall back to standard AdamW.
+    """
+    try:
+        from flashoptim import FlashAdamW  # type: ignore[import-untyped]
+        return FlashAdamW(params, lr=lr)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _make_optimizer(
     params,
     lr: float,
+    *,
+    use_flash: bool = False,
 ) -> torch.optim.Optimizer:
-    """Create an AdamW optimizer."""
+    """Create an optimizer — FlashAdamW when requested and available, else AdamW."""
+    if use_flash:
+        optimizer = _try_flash_adamw(params, lr)
+        if optimizer is not None:
+            return optimizer
     return torch.optim.AdamW(params, lr=lr)
 
 
@@ -95,12 +117,14 @@ def initialize_training_state(
     actor = Actor(latent_dim=latent_dim, action_dim=action_dim).to(device)
     critic = Critic(latent_dim=latent_dim).to(device)
 
+    _flash = config.training.use_flash_optimizer and device.type == "cuda"
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,
+        use_flash=_flash,
     )
-    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr)
-    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr)
+    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr, use_flash=_flash)
+    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr, use_flash=_flash)
     return (
         replay_buffer,
         world_model,
@@ -170,6 +194,22 @@ def run_training_experiment(
     actor_scheduler = _make_warmup_scheduler(actor_optimizer, config.training.lr_warmup_steps)
     critic_scheduler = _make_warmup_scheduler(critic_optimizer, config.training.lr_warmup_steps)
 
+    # AMP – automatic mixed precision (disabled by default)
+    device = resolve_training_device(config.device)
+    if config.training.use_amp and device.type == "cuda":
+        amp_dtype = resolve_amp_dtype(config.training.amp_dtype)
+        amp_context = torch.amp.autocast(device_type="cuda", dtype=amp_dtype)
+        # bfloat16 does not need scaling; float16 does
+        _use_scaler = amp_dtype == torch.float16
+        wm_scaler = torch.amp.GradScaler("cuda") if _use_scaler else None
+        actor_scaler = torch.amp.GradScaler("cuda") if _use_scaler else None
+        critic_scaler = torch.amp.GradScaler("cuda") if _use_scaler else None
+    else:
+        amp_context = None
+        wm_scaler = None
+        actor_scaler = None
+        critic_scaler = None
+
     latest_checkpoint: Path | None = None
     latest_metrics = PipelineCycleMetrics(
         warm_start_added=0,
@@ -206,6 +246,10 @@ def run_training_experiment(
             warm_start_steps=cycle_warm_start_steps,
             policy_steps=cycle_policy_steps,
             seed=config.seed + step - 1,
+            wm_scaler=wm_scaler,
+            actor_scaler=actor_scaler,
+            critic_scaler=critic_scaler,
+            amp_context=amp_context,
         )
 
         # Step LR warm-up schedulers (no-op when scheduler is None)

@@ -26,6 +26,17 @@ env:
     longitudinal_scale: 1.0
     lateral_scale: 0.35
     smoothing_factor: 0.6
+  reward:
+    collision_reward: -1.0
+    right_lane_reward: 0.1
+    high_speed_reward: 0.4
+    lane_change_reward: 0.0
+    normalize_reward: true
+    reward_speed_range: [20.0, 30.0]
+    offroad_terminal: false
+    offroad_penalty: 3.0
+    steering_penalty: 0.05
+    steering_change_penalty: 0.1
 replay:
   capacity: 50000
   sequence_length: 8

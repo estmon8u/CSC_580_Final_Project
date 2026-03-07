@@ -8,7 +8,7 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -28,6 +28,11 @@ class ImaginedTrajectory:
     rewards: Tensor
     values: Tensor
     bootstrap: Tensor
+
+
+def _noop_context():
+    """Return a context manager that does nothing (for non-AMP paths)."""
+    return nullcontext()
 
 
 @contextmanager
@@ -146,11 +151,15 @@ def train_behavior_step(
     lateral_scale: float = 1.0,
     smoothing_factor: float = 0.0,
     lateral_control: bool = True,
+    actor_scaler: torch.amp.GradScaler | None = None,
+    critic_scaler: torch.amp.GradScaler | None = None,
+    amp_context: torch.amp.autocast | None = None,
 ) -> dict[str, float]:
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
-    with frozen_params(world_model), frozen_params(critic):
+    _amp = amp_context if amp_context is not None else _noop_context()
+    with _amp, frozen_params(world_model), frozen_params(critic):
         imagined_for_actor = imagine_trajectory(
             world_model,
             actor,
@@ -171,14 +180,21 @@ def train_behavior_step(
         )
         actor_loss = -actor_returns.mean()
 
-    actor_loss.backward()
-    torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
-    actor_optimizer.step()
+    if actor_scaler is not None:
+        actor_scaler.scale(actor_loss).backward()
+        actor_scaler.unscale_(actor_optimizer)
+        torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
+        actor_scaler.step(actor_optimizer)
+        actor_scaler.update()
+    else:
+        actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
+        actor_optimizer.step()
 
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
-    with frozen_params(world_model), frozen_params(actor):
+    with _amp, frozen_params(world_model), frozen_params(actor):
         imagined_for_critic = imagine_trajectory(
             world_model,
             actor,
@@ -199,9 +215,16 @@ def train_behavior_step(
         ).detach()
         critic_loss = F.mse_loss(imagined_for_critic.values, critic_targets)
 
-    critic_loss.backward()
-    torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
-    critic_optimizer.step()
+    if critic_scaler is not None:
+        critic_scaler.scale(critic_loss).backward()
+        critic_scaler.unscale_(critic_optimizer)
+        torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
+        critic_scaler.step(critic_optimizer)
+        critic_scaler.update()
+    else:
+        critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
+        critic_optimizer.step()
 
     metrics = {
         "actor_loss": float(actor_loss.detach().cpu().item()),

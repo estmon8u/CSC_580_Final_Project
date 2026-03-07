@@ -272,3 +272,96 @@ def test_grad_clip_norm_passed_through_pipeline(monkeypatch) -> None:
 
     assert all(v == 42.0 for v in captured_wm_clip), f"Expected 42.0, got {captured_wm_clip}"
     assert all(v == 42.0 for v in captured_beh_clip), f"Expected 42.0, got {captured_beh_clip}"
+
+
+# ---------------------------------------------------------------------------
+# AMP configuration tests
+# ---------------------------------------------------------------------------
+
+def test_amp_config_defaults() -> None:
+    """AMP should be disabled by default."""
+    config = TrainingConfig()
+    assert config.use_amp is False
+    assert config.amp_dtype == "bfloat16"
+    assert config.use_flash_optimizer is False
+
+
+def test_amp_config_accepts_float16() -> None:
+    config = TrainingConfig(use_amp=True, amp_dtype="float16")
+    assert config.amp_dtype == "float16"
+
+
+def test_amp_config_from_dict() -> None:
+    config = ExperimentConfig.model_validate({
+        "training": {
+            "use_amp": True,
+            "amp_dtype": "bfloat16",
+            "use_flash_optimizer": True,
+        }
+    })
+    assert config.training.use_amp is True
+    assert config.training.amp_dtype == "bfloat16"
+    assert config.training.use_flash_optimizer is True
+
+
+def test_resolve_amp_dtype() -> None:
+    from tiny_dreamer_highway.training.pipeline import resolve_amp_dtype
+    assert resolve_amp_dtype("bfloat16") == torch.bfloat16
+    assert resolve_amp_dtype("float16") == torch.float16
+
+
+def test_world_model_step_accepts_amp_args() -> None:
+    """train_world_model_step should work when amp args are None (CPU path)."""
+    torch.manual_seed(7)
+    model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    observations = torch.randint(0, 255, (4, 1, 64, 64), dtype=torch.uint8)
+    actions = torch.randn(4, 2)
+    rewards = torch.randn(4)
+
+    _, metrics = train_world_model_step(
+        model, optimizer, observations, actions, rewards,
+        grad_scaler=None,
+        amp_context=None,
+    )
+    assert "total_loss" in metrics
+
+
+def test_behavior_step_accepts_amp_args() -> None:
+    """train_behavior_step should work when amp args are None (CPU path)."""
+    torch.manual_seed(7)
+    world_model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
+    actor = Actor(latent_dim=160, action_dim=2)
+    critic = Critic(latent_dim=160)
+    actor_opt = torch.optim.AdamW(actor.parameters(), lr=1e-3)
+    critic_opt = torch.optim.AdamW(critic.parameters(), lr=1e-3)
+    start_state = world_model.rssm.initial_state(batch_size=4)
+
+    metrics = train_behavior_step(
+        world_model, actor, critic, actor_opt, critic_opt,
+        start_state, horizon=3,
+        actor_scaler=None,
+        critic_scaler=None,
+        amp_context=None,
+    )
+    assert "actor_loss" in metrics
+
+
+# ---------------------------------------------------------------------------
+# FlashAdamW optional import tests
+# ---------------------------------------------------------------------------
+
+def test_make_optimizer_returns_adamw_when_flash_unavailable() -> None:
+    """When use_flash=True but flashoptim is not installed, should fall back to AdamW."""
+    from tiny_dreamer_highway.training.experiment import _make_optimizer
+    params = [torch.nn.Parameter(torch.randn(3))]
+    optimizer = _make_optimizer(params, lr=1e-3, use_flash=True)
+    # On Windows/CPU, FlashAdamW is not available — should get AdamW
+    assert isinstance(optimizer, torch.optim.AdamW)
+
+
+def test_make_optimizer_flash_false_returns_adamw() -> None:
+    from tiny_dreamer_highway.training.experiment import _make_optimizer
+    params = [torch.nn.Parameter(torch.randn(3))]
+    optimizer = _make_optimizer(params, lr=1e-3, use_flash=False)
+    assert isinstance(optimizer, torch.optim.AdamW)

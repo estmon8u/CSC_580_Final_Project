@@ -34,6 +34,11 @@ class PipelineCycleMetrics:
     behavior_metrics: dict[str, float]
 
 
+def resolve_amp_dtype(name: str) -> torch.dtype:
+    """Map config string to torch dtype for AMP."""
+    return {"bfloat16": torch.bfloat16, "float16": torch.float16}[name]
+
+
 def _average_metric_dicts(metrics_list: list[dict[str, float]]) -> dict[str, float]:
     if not metrics_list:
         return {}
@@ -143,6 +148,10 @@ def run_training_cycle(
     warm_start_steps: int = 0,
     policy_steps: int = 0,
     seed: int | None = None,
+    wm_scaler: torch.amp.GradScaler | None = None,
+    actor_scaler: torch.amp.GradScaler | None = None,
+    critic_scaler: torch.amp.GradScaler | None = None,
+    amp_context: torch.amp.autocast | None = None,
 ) -> PipelineCycleMetrics:
     warm_start_added = 0
     if warm_start_steps > 0:
@@ -176,6 +185,8 @@ def run_training_cycle(
             kl_weight=training_config.kl_weight,
             free_nats=training_config.free_nats,
             grad_clip_norm=training_config.grad_clip_norm,
+            grad_scaler=wm_scaler,
+            amp_context=amp_context,
         )
         world_model_metrics_list.append(world_model_metrics)
 
@@ -198,6 +209,9 @@ def run_training_cycle(
             lateral_scale=config.env.action.lateral_scale,
             smoothing_factor=config.env.action.smoothing_factor,
             lateral_control=config.env.action.lateral,
+            actor_scaler=actor_scaler,
+            critic_scaler=critic_scaler,
+            amp_context=amp_context,
         )
         behavior_metrics_list.append(behavior_metrics)
 

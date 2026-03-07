@@ -63,6 +63,11 @@ def test_run_training_experiment_writes_logs_and_checkpoints(monkeypatch, tmp_pa
         warm_start_steps: int = 0,
         policy_steps: int = 0,
         seed: int | None = None,
+        *,
+        wm_scaler=None,
+        actor_scaler=None,
+        critic_scaler=None,
+        amp_context=None,
     ) -> PipelineCycleMetrics:
         for _ in range(max(1, warm_start_steps + policy_steps)):
             replay_buffer.add(
