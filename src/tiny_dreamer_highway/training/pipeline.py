@@ -67,8 +67,12 @@ def seed_latent_state(
     world_model: TinyWorldModel,
     observations: Tensor,
     actions: Tensor,
+    *,
+    amp_context: torch.amp.autocast | None = None,
 ) -> LatentState:
-    with torch.no_grad():
+    from contextlib import nullcontext
+    ctx = amp_context if amp_context is not None else nullcontext()
+    with torch.no_grad(), ctx:
         output = world_model(observations, actions)
     return output.posterior_state
 
@@ -195,7 +199,7 @@ def run_training_cycle(
         batch = replay_buffer.sample_batch(batch_size=batch_size)
         observations = torch.as_tensor(batch.observations, device=model_device)
         actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
-        start_state = seed_latent_state(world_model, observations, actions)
+        start_state = seed_latent_state(world_model, observations, actions, amp_context=amp_context)
         behavior_metrics = train_behavior_step(
             world_model,
             actor,
