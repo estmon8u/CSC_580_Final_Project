@@ -1,6 +1,6 @@
 """Replay buffer utilities for Tiny Dreamer Highway.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -28,6 +28,11 @@ class ReplayBuffer:
 
     def __len__(self) -> int:
         return len(self.transitions)
+
+    def _ordered_transitions(self) -> list[Transition]:
+        if len(self.transitions) < self.capacity:
+            return list(self.transitions)
+        return self.transitions[self._position :] + self.transitions[: self._position]
 
     def add(self, transition: Transition) -> None:
         if len(self.transitions) < self.capacity:
@@ -63,12 +68,26 @@ class ReplayBuffer:
         if not self.can_sample(batch_size=batch_size, sequence_length=sequence_length):
             raise ValueError("not enough transitions to sample sequences")
 
-        max_start = len(self.transitions) - sequence_length
+        ordered = self._ordered_transitions()
+        max_start = len(ordered) - sequence_length
         if max_start < 0:
             raise ValueError("sequence_length exceeds replay size")
 
-        start_indices: NDArray[np.int64] = np.random.randint(0, max_start + 1, size=batch_size)
+        valid_start_indices = [
+            start_index
+            for start_index in range(max_start + 1)
+            if not any(transition.done for transition in ordered[start_index : start_index + sequence_length - 1])
+        ]
+        if not valid_start_indices:
+            raise ValueError("no valid sequences available without crossing episode boundaries")
+
+        allow_replacement = batch_size > len(valid_start_indices)
+        start_indices = np.random.choice(
+            np.asarray(valid_start_indices, dtype=np.int64),
+            size=batch_size,
+            replace=allow_replacement,
+        )
         return [
-            self.transitions[start_index : start_index + sequence_length]
+            ordered[start_index : start_index + sequence_length]
             for start_index in start_indices.tolist()
         ]

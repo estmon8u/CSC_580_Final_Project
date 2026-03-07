@@ -1,6 +1,6 @@
 """Lightweight metrics export helpers for training artifacts.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -28,6 +28,7 @@ def flatten_cycle_metrics(step: int, metrics: PipelineCycleMetrics) -> dict[str,
     }
     record.update({f"world_model/{name}": value for name, value in metrics.world_model_metrics.items()})
     record.update({f"behavior/{name}": value for name, value in metrics.behavior_metrics.items()})
+    record.update({f"evaluation/{name}": value for name, value in metrics.evaluation_metrics.items()})
     return record
 
 

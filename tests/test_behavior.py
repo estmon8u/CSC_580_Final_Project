@@ -34,6 +34,8 @@ def test_imagine_trajectory_returns_expected_shapes() -> None:
     assert trajectory.actions.shape == (5, 3, 2)
     assert trajectory.rewards.shape == (5, 3, 1)
     assert trajectory.values.shape == (5, 3, 1)
+    assert trajectory.continues is not None
+    assert trajectory.continues.shape == (5, 3, 1)
     assert trajectory.bootstrap.shape == (3, 1)
 
 
@@ -48,6 +50,17 @@ def test_td_lambda_returns_matches_one_step_case_when_lambda_zero() -> None:
     # step 0: 1.0 + 0.5 * 20.0 = 11.0
     # step 1: 2.0 + 0.5 * 20.0 = 12.0
     expected = torch.tensor([[[11.0]], [[12.0]]])
+    assert torch.allclose(returns, expected)
+
+
+def test_td_lambda_returns_uses_per_step_discounts_when_provided() -> None:
+    rewards = torch.tensor([[[1.0]], [[2.0]]])
+    values = torch.tensor([[[10.0]], [[20.0]]])
+    discounts = torch.tensor([[[0.5]], [[0.0]]])
+
+    returns = td_lambda_returns(rewards, values, discount=0.99, lambda_=0.0, discounts=discounts)
+
+    expected = torch.tensor([[[11.0]], [[2.0]]])
     assert torch.allclose(returns, expected)
 
 

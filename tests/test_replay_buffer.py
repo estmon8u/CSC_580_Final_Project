@@ -41,8 +41,34 @@ def test_replay_buffer_sample_batch_shapes() -> None:
 def test_replay_buffer_sample_sequences_length() -> None:
     buffer = ReplayBuffer(capacity=10)
     for seed in range(10):
-        buffer.add(make_transition(seed))
+        transition = make_transition(seed)
+        transition.done = False
+        buffer.add(transition)
 
     sequences = buffer.sample_sequences(batch_size=3, sequence_length=4)
     assert len(sequences) == 3
     assert all(len(sequence) == 4 for sequence in sequences)
+
+
+def test_replay_buffer_sample_sequences_do_not_cross_episode_boundaries() -> None:
+    buffer = ReplayBuffer(capacity=8)
+    for seed in range(8):
+        transition = make_transition(seed)
+        transition.done = seed == 2
+        buffer.add(transition)
+
+    sequences = buffer.sample_sequences(batch_size=4, sequence_length=3)
+    for sequence in sequences:
+        assert not any(transition.done for transition in sequence[:-1])
+
+
+def test_replay_buffer_sample_sequences_use_chronological_order_after_wraparound() -> None:
+    buffer = ReplayBuffer(capacity=4)
+    for seed in range(6):
+        transition = make_transition(seed)
+        transition.done = False
+        buffer.add(transition)
+
+    sequence = buffer.sample_sequences(batch_size=1, sequence_length=3)[0]
+    observations = [int(transition.observation[0, 0]) for transition in sequence]
+    assert observations in ([2, 3, 4], [3, 4, 5])

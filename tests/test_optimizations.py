@@ -1,6 +1,6 @@
 """Tests for training optimizations: gradient clipping, AdamW, LR warm-up.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot

@@ -1,6 +1,6 @@
 """Typed experiment configuration for Tiny Dreamer Highway.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -56,11 +56,14 @@ class ReplayConfig(BaseModel):
 class TrainingConfig(BaseModel):
     batch_size: int = Field(default=4, ge=1, le=512)
     imagination_horizon: int = Field(default=5, ge=2, le=64)
+    discount: float = Field(default=0.99, ge=0.0, le=1.0)
+    lambda_: float = Field(default=0.95, ge=0.0, le=1.0)
     world_model_lr: float = Field(default=3e-4, gt=0.0)
     actor_lr: float = Field(default=8e-5, gt=0.0)
     critic_lr: float = Field(default=8e-5, gt=0.0)
     kl_weight: float = Field(default=1.0, ge=0.0)
     free_nats: float = Field(default=3.0, ge=0.0)
+    continue_loss_weight: float = Field(default=1.0, ge=0.0)
     grad_clip_norm: float = Field(default=100.0, gt=0.0, le=10_000.0)
     lr_warmup_steps: int = Field(default=0, ge=0, le=10_000)
     use_amp: bool = False
@@ -74,6 +77,12 @@ class TrainingConfig(BaseModel):
     checkpoint_interval: int = Field(default=5, ge=1, le=1_000_000)
 
 
+class EvaluationConfig(BaseModel):
+    interval: int = Field(default=0, ge=0, le=1_000_000)
+    episodes: int = Field(default=0, ge=0, le=1_000)
+    max_steps: int = Field(default=200, ge=1, le=10_000)
+
+
 class ModelConfig(BaseModel):
     """Configurable model dimensions — matches DreamerV1 reference defaults."""
 
@@ -82,12 +91,19 @@ class ModelConfig(BaseModel):
     stochastic_dim: int = Field(default=30, ge=8, le=512)
     hidden_dim: int = Field(default=200, ge=32, le=2048)
     rssm_num_layers: int = Field(default=2, ge=1, le=4)
+    rssm_min_std: float = Field(default=0.1, gt=0.0, le=5.0)
     actor_hidden_dim: int = Field(default=200, ge=32, le=2048)
     actor_num_layers: int = Field(default=2, ge=1, le=4)
+    actor_init_std: float = Field(default=5.0, gt=0.0, le=10.0)
+    actor_mean_scale: float = Field(default=5.0, gt=0.0, le=10.0)
+    actor_min_std: float = Field(default=1e-4, gt=0.0, le=1.0)
     critic_hidden_dim: int = Field(default=200, ge=32, le=2048)
     critic_num_layers: int = Field(default=3, ge=1, le=6)
     reward_hidden_dim: int = Field(default=200, ge=32, le=2048)
     reward_num_layers: int = Field(default=2, ge=1, le=4)
+    use_continue_model: bool = True
+    continue_hidden_dim: int = Field(default=200, ge=32, le=2048)
+    continue_num_layers: int = Field(default=2, ge=1, le=4)
 
 
 class ExperimentConfig(BaseModel):
@@ -96,6 +112,7 @@ class ExperimentConfig(BaseModel):
     env: EnvConfig = Field(default_factory=EnvConfig)
     replay: ReplayConfig = Field(default_factory=ReplayConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
+    evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
 
 

@@ -1,4 +1,4 @@
-# Name: Esteban
+# Name: Esteban Montelongo
 # Course: CSC 580 AI 2
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
@@ -38,26 +38,40 @@ replay:
 training:
   batch_size: 4
   imagination_horizon: 5
+  discount: 0.99
+  lambda_: 0.95
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
+  continue_loss_weight: 1.0
   world_model_updates_per_cycle: 1
   behavior_updates_per_cycle: 1
   cycles: 10
   warm_start_steps: 64
   policy_steps: 8
   checkpoint_interval: 5
+evaluation:
+  interval: 0
+  episodes: 0
+  max_steps: 200
 model:
   embedding_dim: 256
   deterministic_dim: 128
   stochastic_dim: 32
   hidden_dim: 128
   rssm_num_layers: 1
+  rssm_min_std: 0.1
   actor_hidden_dim: 64
   actor_num_layers: 1
+  actor_init_std: 5.0
+  actor_mean_scale: 5.0
+  actor_min_std: 0.0001
   critic_hidden_dim: 64
   critic_num_layers: 1
   reward_hidden_dim: 64
   reward_num_layers: 1
+  use_continue_model: true
+  continue_hidden_dim: 64
+  continue_num_layers: 1

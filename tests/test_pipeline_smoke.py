@@ -132,8 +132,9 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
     assert set(metrics.world_model_metrics.keys()) == {
         "reconstruction_loss",
         "reward_loss",
-            "kl_loss",
-            "kl_loss_raw",
+	    "continue_loss",
+	    "kl_loss",
+	    "kl_loss_raw",
         "total_loss",
     }
     assert set(metrics.behavior_metrics.keys()) == {
@@ -177,6 +178,7 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
         return [], {
             "reconstruction_loss": 1.0,
             "reward_loss": 0.5,
+	        "continue_loss": 0.1,
             "kl_loss": 3.0,
             "kl_loss_raw": 2.0,
             "total_loss": 4.5,

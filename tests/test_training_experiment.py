@@ -86,6 +86,7 @@ def test_run_training_experiment_writes_logs_and_checkpoints(monkeypatch, tmp_pa
             world_model_metrics={
                 "reconstruction_loss": 1.0,
                 "reward_loss": 0.5,
+                "continue_loss": 0.1,
                 "total_loss": 1.5,
             },
             behavior_metrics={
@@ -94,6 +95,7 @@ def test_run_training_experiment_writes_logs_and_checkpoints(monkeypatch, tmp_pa
                 "imagined_reward_mean": 0.3,
                 "imagined_value_mean": 0.4,
             },
+            evaluation_metrics={},
         )
 
     monkeypatch.setattr(

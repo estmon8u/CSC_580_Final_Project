@@ -27,6 +27,10 @@ def make_metrics() -> PipelineCycleMetrics:
             "imagined_reward_mean": 0.6,
             "imagined_value_mean": 0.7,
         },
+        evaluation_metrics={
+            "mean_reward": 1.2,
+            "mean_steps": 33.0,
+        },
     )
 
 
@@ -36,6 +40,7 @@ def test_flatten_cycle_metrics_returns_prefixed_record() -> None:
     assert record["warm_start_added"] == 16
     assert record["world_model/total_loss"] == 0.3
     assert record["behavior/critic_loss"] == 0.5
+    assert record["evaluation/mean_reward"] == 1.2
 
 
 def test_append_metrics_jsonl_and_csv_write_records(tmp_path: Path) -> None:
@@ -64,6 +69,7 @@ def test_write_artifact_summary_persists_latest_checkpoint_and_metrics(tmp_path:
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["latest_step"] == 2
     assert summary["latest_metrics"]["behavior/imagined_value_mean"] == 0.7
+    assert summary["latest_metrics"]["evaluation/mean_reward"] == 1.2
     assert summary["checkpoint_file"].endswith("checkpoint_00002.pt")
 
 

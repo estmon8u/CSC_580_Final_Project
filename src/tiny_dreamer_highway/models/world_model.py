@@ -1,6 +1,6 @@
 """Combined world-model forward pass utilities.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
-from tiny_dreamer_highway.models.decoder import ObservationDecoder, RewardPredictor
+from tiny_dreamer_highway.models.decoder import ContinuePredictor, ObservationDecoder, RewardPredictor
 from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
 from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
 from tiny_dreamer_highway.utils.weight_init import apply_kaiming_init
@@ -26,6 +26,7 @@ class WorldModelOutput:
     posterior_state: LatentState
     reconstruction: Tensor
     predicted_reward: Tensor
+    predicted_continue: Tensor | None = None
 
 
 class TinyWorldModel(nn.Module):
@@ -37,9 +38,13 @@ class TinyWorldModel(nn.Module):
         deterministic_dim: int = 200,
         stochastic_dim: int = 30,
         hidden_dim: int = 200,
+        rssm_min_std: float = 0.1,
         rssm_num_layers: int = 2,
         reward_hidden_dim: int = 200,
         reward_num_layers: int = 2,
+        use_continue_model: bool = True,
+        continue_hidden_dim: int = 200,
+        continue_num_layers: int = 2,
     ) -> None:
         super().__init__()
         channels, height, width = observation_shape
@@ -54,6 +59,7 @@ class TinyWorldModel(nn.Module):
             deterministic_dim=deterministic_dim,
             stochastic_dim=stochastic_dim,
             hidden_dim=hidden_dim,
+            min_std=rssm_min_std,
             num_layers=rssm_num_layers,
         )
         latent_dim = deterministic_dim + stochastic_dim
@@ -62,6 +68,15 @@ class TinyWorldModel(nn.Module):
             latent_dim=latent_dim,
             hidden_dim=reward_hidden_dim,
             num_layers=reward_num_layers,
+        )
+        self.continue_predictor = (
+            ContinuePredictor(
+                latent_dim=latent_dim,
+                hidden_dim=continue_hidden_dim,
+                num_layers=continue_num_layers,
+            )
+            if use_continue_model
+            else None
         )
 
         # Kaiming uniform initialization for all Conv/Linear layers
@@ -89,10 +104,14 @@ class TinyWorldModel(nn.Module):
         latent_features = posterior_state.features
         reconstruction = self.decoder(latent_features)
         predicted_reward = self.reward_predictor(latent_features)
+        predicted_continue = (
+            self.continue_predictor(latent_features) if self.continue_predictor is not None else None
+        )
         return WorldModelOutput(
             embedding=embedding,
             prior_state=prior_state,
             posterior_state=posterior_state,
             reconstruction=reconstruction,
             predicted_reward=predicted_reward,
+            predicted_continue=predicted_continue,
         )

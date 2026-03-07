@@ -1,6 +1,6 @@
 """End-to-end training runner for Tiny Dreamer Highway.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -32,6 +32,54 @@ class TrainingRunSummary:
     latest_checkpoint: Path | None
     checkpoint_dir: Path
     log_dir: Path
+
+
+def evaluate_training_policy(
+    config: ExperimentConfig,
+    world_model: TinyWorldModel,
+    actor: Actor,
+    *,
+    episodes: int,
+    max_steps: int,
+    seed: int | None = None,
+) -> dict[str, float]:
+    if episodes <= 0:
+        return {}
+
+    from tiny_dreamer_highway.evaluation.policy_rollout import run_policy_episode
+
+    world_model_was_training = world_model.training
+    actor_was_training = actor.training
+    world_model.eval()
+    actor.eval()
+
+    rewards: list[float] = []
+    steps: list[int] = []
+    crashes = 0
+    try:
+        for episode_index in range(episodes):
+            episode_seed = None if seed is None else seed + episode_index
+            result = run_policy_episode(
+                config,
+                world_model,
+                actor,
+                max_steps=max_steps,
+                seed=episode_seed,
+                capture_frames=False,
+            )
+            rewards.append(result.total_reward)
+            steps.append(result.steps)
+            crashes += int(result.terminated)
+    finally:
+        world_model.train(world_model_was_training)
+        actor.train(actor_was_training)
+
+    return {
+        "episodes": float(episodes),
+        "mean_reward": float(sum(rewards) / len(rewards)),
+        "mean_steps": float(sum(steps) / len(steps)),
+        "crash_rate": float(crashes / episodes),
+    }
 
 
 def resolve_training_device(device_name: str) -> torch.device:
@@ -128,9 +176,13 @@ def initialize_training_state(
         deterministic_dim=mc.deterministic_dim,
         stochastic_dim=mc.stochastic_dim,
         hidden_dim=mc.hidden_dim,
+        rssm_min_std=mc.rssm_min_std,
         rssm_num_layers=mc.rssm_num_layers,
         reward_hidden_dim=mc.reward_hidden_dim,
         reward_num_layers=mc.reward_num_layers,
+        use_continue_model=mc.use_continue_model,
+        continue_hidden_dim=mc.continue_hidden_dim,
+        continue_num_layers=mc.continue_num_layers,
     ).to(device)
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
     actor = Actor(
@@ -138,6 +190,9 @@ def initialize_training_state(
         action_dim=action_dim,
         hidden_dim=mc.actor_hidden_dim,
         num_layers=mc.actor_num_layers,
+        init_std=mc.actor_init_std,
+        mean_scale=mc.actor_mean_scale,
+        min_std=mc.actor_min_std,
     ).to(device)
     critic = Critic(
         latent_dim=latent_dim,
@@ -259,6 +314,7 @@ def run_training_experiment(
         replay_size=0,
         world_model_metrics={},
         behavior_metrics={},
+        evaluation_metrics={},
     )
     run_start = perf_counter()
 
@@ -294,6 +350,17 @@ def run_training_experiment(
             amp_context=amp_context,
         )
 
+        eval_cfg = config.evaluation
+        if eval_cfg.episodes > 0 and eval_cfg.interval > 0 and step % eval_cfg.interval == 0:
+            latest_metrics.evaluation_metrics = evaluate_training_policy(
+                config,
+                world_model,
+                actor,
+                episodes=eval_cfg.episodes,
+                max_steps=eval_cfg.max_steps,
+                seed=config.seed + step * 1_000,
+            )
+
         # Step LR warm-up schedulers (no-op when scheduler is None)
         for scheduler in (wm_scheduler, actor_scheduler, critic_scheduler):
             if scheduler is not None:
@@ -328,10 +395,12 @@ def run_training_experiment(
             world_total = latest_metrics.world_model_metrics.get("total_loss")
             actor_loss = latest_metrics.behavior_metrics.get("actor_loss")
             critic_loss = latest_metrics.behavior_metrics.get("critic_loss")
+            eval_reward = latest_metrics.evaluation_metrics.get("mean_reward")
             checkpoint_text = checkpoint_file.name if checkpoint_file is not None else "-"
             wt_str = f"{world_total:.4f}" if world_total is not None else "n/a"
             al_str = f"{actor_loss:.4f}" if actor_loss is not None else "n/a"
             cl_str = f"{critic_loss:.4f}" if critic_loss is not None else "n/a"
+            er_str = f"{eval_reward:.4f}" if eval_reward is not None else "n/a"
             print(
                 "[train] "
                 f"step={step}/{total_cycles} | "
@@ -341,6 +410,7 @@ def run_training_experiment(
                 f"world_total={wt_str} | "
                 f"actor={al_str} | "
                 f"critic={cl_str} | "
+                f"eval_reward={er_str} | "
                 f"cycle_s={cycle_seconds:.1f} | "
                 f"elapsed_s={elapsed_seconds:.1f} | "
                 f"checkpoint={checkpoint_text}",

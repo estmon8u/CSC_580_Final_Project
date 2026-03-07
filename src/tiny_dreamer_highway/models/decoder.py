@@ -1,6 +1,6 @@
 """Decoder and reward heads for the world model.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -60,6 +60,29 @@ class ObservationDecoder(nn.Module):
 
 
 class RewardPredictor(nn.Module):
+    def __init__(self, latent_dim: int, hidden_dim: int = 200, num_layers: int = 2) -> None:
+        super().__init__()
+        if latent_dim <= 0:
+            raise ValueError("latent_dim must be positive")
+        if hidden_dim <= 0:
+            raise ValueError("hidden_dim must be positive")
+
+        layers: list[nn.Module] = []
+        current_dim = latent_dim
+        for _ in range(num_layers):
+            layers.append(nn.Linear(current_dim, hidden_dim))
+            layers.append(nn.ELU())
+            current_dim = hidden_dim
+        layers.append(nn.Linear(current_dim, 1))
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, latent_features: Tensor) -> Tensor:
+        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        return self.network(latent_features)
+
+
+class ContinuePredictor(nn.Module):
     def __init__(self, latent_dim: int, hidden_dim: int = 200, num_layers: int = 2) -> None:
         super().__init__()
         if latent_dim <= 0:

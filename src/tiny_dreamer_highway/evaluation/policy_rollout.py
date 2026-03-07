@@ -1,6 +1,6 @@
 """Record agent-driving demo videos from a trained policy.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -79,9 +79,13 @@ def _build_models(
         deterministic_dim=mc.deterministic_dim,
         stochastic_dim=mc.stochastic_dim,
         hidden_dim=mc.hidden_dim,
+        rssm_min_std=mc.rssm_min_std,
         rssm_num_layers=mc.rssm_num_layers,
         reward_hidden_dim=mc.reward_hidden_dim,
         reward_num_layers=mc.reward_num_layers,
+        use_continue_model=mc.use_continue_model,
+        continue_hidden_dim=mc.continue_hidden_dim,
+        continue_num_layers=mc.continue_num_layers,
     ).to(device)
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
     actor = Actor(
@@ -89,6 +93,9 @@ def _build_models(
         action_dim=action_dim,
         hidden_dim=mc.actor_hidden_dim,
         num_layers=mc.actor_num_layers,
+        init_std=mc.actor_init_std,
+        mean_scale=mc.actor_mean_scale,
+        min_std=mc.actor_min_std,
     ).to(device)
     critic = Critic(
         latent_dim=latent_dim,
@@ -124,6 +131,7 @@ def run_policy_episode(
     *,
     max_steps: int = 200,
     seed: int | None = None,
+    capture_frames: bool = True,
 ) -> RolloutResult:
     """Run the trained actor in the real highway-env for one episode.
 
@@ -164,9 +172,10 @@ def run_policy_episode(
 
     try:
         # capture the initial rendered frame
-        frame = env.render()
-        if frame is not None:
-            frames.append(np.asarray(frame, dtype=np.uint8))
+        if capture_frames:
+            frame = env.render()
+            if frame is not None:
+                frames.append(np.asarray(frame, dtype=np.uint8))
 
         for _ in range(max_steps):
             with torch.no_grad():
@@ -190,9 +199,10 @@ def run_policy_episode(
             next_observation, reward, term, trunc, _ = env.step(action)
             rewards.append(float(reward))
 
-            frame = env.render()
-            if frame is not None:
-                frames.append(np.asarray(frame, dtype=np.uint8))
+            if capture_frames:
+                frame = env.render()
+                if frame is not None:
+                    frames.append(np.asarray(frame, dtype=np.uint8))
 
             observation = next_observation
             if term or trunc:

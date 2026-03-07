@@ -1,6 +1,6 @@
 """Command-line entry points for early project workflows.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -62,7 +62,8 @@ def summarize_training_run(summary) -> str:
         f"latest_checkpoint={checkpoint_text} | "
         f"world_total_loss={summary.latest_record.get('world_model/total_loss')} | "
         f"actor_loss={summary.latest_record.get('behavior/actor_loss')} | "
-        f"critic_loss={summary.latest_record.get('behavior/critic_loss')}"
+        f"critic_loss={summary.latest_record.get('behavior/critic_loss')} | "
+        f"eval_reward={summary.latest_record.get('evaluation/mean_reward')}"
     )
 
 

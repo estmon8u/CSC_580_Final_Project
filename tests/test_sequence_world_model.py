@@ -47,11 +47,24 @@ def test_compute_sequence_world_model_losses_returns_outputs_per_step() -> None:
     actions = torch.randn(2, 3, 2)
     rewards = torch.randn(2, 3)
 
-    outputs, losses = compute_sequence_world_model_losses(model, observations, actions, rewards)
+    outputs, losses = compute_sequence_world_model_losses(
+        model,
+        observations,
+        actions,
+        rewards,
+        dones=torch.zeros(2, 3),
+    )
 
     assert len(outputs) == 3
     assert outputs[-1].reconstruction.shape == (2, 1, 64, 64)
-    assert set(losses.keys()) == {"reconstruction_loss", "reward_loss", "kl_loss", "kl_loss_raw", "total_loss"}
+    assert set(losses.keys()) == {
+        "reconstruction_loss",
+        "reward_loss",
+        "continue_loss",
+        "kl_loss",
+        "kl_loss_raw",
+        "total_loss",
+    }
     assert losses["total_loss"].ndim == 0
     assert losses["kl_loss"].item() >= 0.0
 
@@ -66,12 +79,20 @@ def test_train_sequence_world_model_step_updates_parameters() -> None:
     observations = torch.randint(0, 256, (2, 4, 1, 64, 64), dtype=torch.uint8)
     actions = torch.randn(2, 4, 2)
     rewards = torch.randn(2, 4)
+    dones = torch.zeros(2, 4)
 
     before = next(model.parameters()).detach().clone()
-    _, metrics = train_sequence_world_model_step(model, optimizer, observations, actions, rewards)
+    _, metrics = train_sequence_world_model_step(model, optimizer, observations, actions, rewards, dones=dones)
     after = next(model.parameters()).detach().clone()
 
-    assert metrics.keys() == {"reconstruction_loss", "reward_loss", "kl_loss", "kl_loss_raw", "total_loss"}
+    assert metrics.keys() == {
+        "reconstruction_loss",
+        "reward_loss",
+        "continue_loss",
+        "kl_loss",
+        "kl_loss_raw",
+        "total_loss",
+    }
     assert metrics["total_loss"] >= 0.0
     assert metrics["kl_loss"] >= 0.0
     assert not torch.equal(before, after)

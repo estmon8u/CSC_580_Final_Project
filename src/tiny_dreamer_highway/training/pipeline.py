@@ -1,6 +1,6 @@
 """Minimal alternating training pipeline helpers.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -8,7 +8,7 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from contextlib import nullcontext
 
@@ -38,6 +38,7 @@ class PipelineCycleMetrics:
     replay_size: int
     world_model_metrics: dict[str, float]
     behavior_metrics: dict[str, float]
+    evaluation_metrics: dict[str, float] = field(default_factory=dict)
 
 
 def resolve_amp_dtype(name: str) -> torch.dtype:
@@ -201,8 +202,10 @@ def run_training_cycle(
             observations,
             actions,
             rewards,
+            dones=torch.as_tensor(seq_batch.dones, dtype=torch.float32, device=model_device),
             kl_weight=training_config.kl_weight,
             free_nats=training_config.free_nats,
+            continue_loss_weight=training_config.continue_loss_weight,
             grad_clip_norm=training_config.grad_clip_norm,
             grad_scaler=wm_scaler,
             amp_context=amp_context,
@@ -245,6 +248,8 @@ def run_training_cycle(
             critic_optimizer,
             start_state,
             horizon=training_config.imagination_horizon,
+            discount=training_config.discount,
+            lambda_=training_config.lambda_,
             grad_clip_norm=training_config.grad_clip_norm,
             longitudinal_scale=config.env.action.longitudinal_scale,
             lateral_scale=config.env.action.lateral_scale,
@@ -274,4 +279,5 @@ def run_training_cycle(
         replay_size=len(replay_buffer),
         world_model_metrics=world_model_metrics,
         behavior_metrics=behavior_metrics,
+        evaluation_metrics={},
     )

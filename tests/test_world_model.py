@@ -22,6 +22,8 @@ def test_tiny_world_model_forward_returns_expected_shapes() -> None:
     assert output.posterior_state.features.shape == (4, 160)
     assert output.reconstruction.shape == (4, 1, 64, 64)
     assert output.predicted_reward.shape == (4, 1)
+    assert output.predicted_continue is not None
+    assert output.predicted_continue.shape == (4, 1)
 
 
 def test_compute_world_model_losses_returns_expected_keys() -> None:
@@ -34,11 +36,19 @@ def test_compute_world_model_losses_returns_expected_keys() -> None:
     rewards = torch.randn(3)
 
     output = model(observations, actions)
-    losses = compute_world_model_losses(output, observations, rewards)
+    losses = compute_world_model_losses(output, observations, rewards, target_dones=torch.zeros(3))
 
-    assert set(losses.keys()) == {"reconstruction_loss", "reward_loss", "kl_loss", "kl_loss_raw", "total_loss"}
+    assert set(losses.keys()) == {
+        "reconstruction_loss",
+        "reward_loss",
+        "continue_loss",
+        "kl_loss",
+        "kl_loss_raw",
+        "total_loss",
+    }
     assert losses["total_loss"].ndim == 0
     assert losses["kl_loss"].item() >= 0.0
+    assert losses["continue_loss"].item() >= 0.0
 
 
 def test_train_world_model_step_runs_optimizer_step() -> None:
@@ -51,12 +61,20 @@ def test_train_world_model_step_runs_optimizer_step() -> None:
     observations = torch.randint(0, 256, (4, 1, 64, 64), dtype=torch.uint8)
     actions = torch.randn(4, 2)
     rewards = torch.randn(4)
+    dones = torch.zeros(4)
 
     before = next(model.parameters()).detach().clone()
-    _, metrics = train_world_model_step(model, optimizer, observations, actions, rewards)
+    _, metrics = train_world_model_step(model, optimizer, observations, actions, rewards, dones=dones)
     after = next(model.parameters()).detach().clone()
 
-    assert metrics.keys() == {"reconstruction_loss", "reward_loss", "kl_loss", "kl_loss_raw", "total_loss"}
+    assert metrics.keys() == {
+        "reconstruction_loss",
+        "reward_loss",
+        "continue_loss",
+        "kl_loss",
+        "kl_loss_raw",
+        "total_loss",
+    }
     assert metrics["total_loss"] >= 0.0
     assert metrics["kl_loss"] >= 0.0
     assert not torch.equal(before, after)

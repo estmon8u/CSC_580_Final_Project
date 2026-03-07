@@ -1,6 +1,6 @@
 """Imagination and actor-critic training helpers.
 
-Name: Esteban
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
@@ -27,6 +27,7 @@ class ImaginedTrajectory:
     actions: Tensor
     rewards: Tensor
     values: Tensor
+    continues: Tensor | None
     bootstrap: Tensor
 
 
@@ -85,6 +86,7 @@ def imagine_trajectory(
     action_steps: list[Tensor] = []
     reward_steps: list[Tensor] = []
     value_steps: list[Tensor] = []
+    continue_steps: list[Tensor] = []
     previous_action: Tensor | None = None
 
     for _ in range(horizon):
@@ -100,6 +102,9 @@ def imagine_trajectory(
         features = state.features
         reward = world_model.reward_predictor(features)
         value = critic(features)
+        if world_model.continue_predictor is not None:
+            continue_prob = torch.sigmoid(world_model.continue_predictor(features))
+            continue_steps.append(continue_prob)
 
         states.append(state)
         feature_steps.append(features)
@@ -112,6 +117,7 @@ def imagine_trajectory(
     stacked_actions = torch.stack(action_steps, dim=0)
     stacked_rewards = torch.stack(reward_steps, dim=0)
     stacked_values = torch.stack(value_steps, dim=0)
+    stacked_continues = torch.stack(continue_steps, dim=0) if continue_steps else None
     bootstrap = critic(state.features)
     return ImaginedTrajectory(
         states=states,
@@ -119,6 +125,7 @@ def imagine_trajectory(
         actions=stacked_actions,
         rewards=stacked_rewards,
         values=stacked_values,
+        continues=stacked_continues,
         bootstrap=bootstrap,
     )
 
@@ -129,6 +136,7 @@ def td_lambda_returns(
     bootstrap: Tensor | None = None,
     discount: float = 0.99,
     lambda_: float = 0.95,
+    discounts: Tensor | None = None,
 ) -> Tensor:
     if rewards.shape != values.shape:
         raise ValueError("rewards and values must have matching shapes")
@@ -138,6 +146,8 @@ def td_lambda_returns(
         raise ValueError("discount must be in [0, 1]")
     if not 0.0 <= lambda_ <= 1.0:
         raise ValueError("lambda_ must be in [0, 1]")
+    if discounts is not None and discounts.shape != rewards.shape:
+        raise ValueError("discounts must match rewards shape when provided")
 
     if bootstrap is None:
         bootstrap = values[-1]
@@ -148,8 +158,9 @@ def td_lambda_returns(
     returns = torch.zeros_like(rewards)
     next_return = bootstrap
     for step in range(rewards.shape[0] - 1, -1, -1):
+        step_discount = discounts[step] if discounts is not None else discount
         blended_target = (1.0 - lambda_) * next_values[step] + lambda_ * next_return
-        next_return = rewards[step] + discount * blended_target
+        next_return = rewards[step] + step_discount * blended_target
         returns[step] = next_return
     return returns
 
@@ -189,9 +200,17 @@ def train_behavior_step(
         imagined = imagine_trajectory(
             world_model, actor, critic, start_state, horizon, **_action_kw,
         )
+        imagined_discounts = (
+            discount * imagined.continues.to(dtype=imagined.rewards.dtype)
+            if imagined.continues is not None
+            else None
+        )
         actor_returns = td_lambda_returns(
             imagined.rewards, imagined.values,
-            bootstrap=imagined.bootstrap, discount=discount, lambda_=lambda_,
+            bootstrap=imagined.bootstrap,
+            discount=discount,
+            lambda_=lambda_,
+            discounts=imagined_discounts,
         )
         actor_loss = -actor_returns.mean()
 
@@ -205,9 +224,17 @@ def train_behavior_step(
         imagined = imagine_trajectory(
             world_model, actor, critic, start_state, horizon, **_action_kw,
         )
+        imagined_discounts = (
+            discount * imagined.continues.to(dtype=imagined.rewards.dtype)
+            if imagined.continues is not None
+            else None
+        )
         critic_targets = td_lambda_returns(
             imagined.rewards, imagined.values,
-            bootstrap=imagined.bootstrap, discount=discount, lambda_=lambda_,
+            bootstrap=imagined.bootstrap,
+            discount=discount,
+            lambda_=lambda_,
+            discounts=imagined_discounts,
         ).detach()
         critic_loss = F.mse_loss(imagined.values, critic_targets)
 
