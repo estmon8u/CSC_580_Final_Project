@@ -28,4 +28,5 @@ class Critic(nn.Module):
         )
 
     def forward(self, latent_features: Tensor) -> Tensor:
+        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
         return self.value(latent_features)

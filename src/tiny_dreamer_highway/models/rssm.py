@@ -58,12 +58,17 @@ class RecurrentStateSpaceModel(nn.Module):
             nn.Linear(hidden_dim, 2 * stochastic_dim),
         )
 
+    @property
+    def _dtype(self) -> torch.dtype:
+        return next(self.parameters()).dtype
+
     def initial_state(self, batch_size: int, device: torch.device | None = None) -> LatentState:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
 
-        deterministic = torch.zeros(batch_size, self.deterministic_dim, device=device)
-        stochastic = torch.zeros(batch_size, self.stochastic_dim, device=device)
+        _dt = self._dtype
+        deterministic = torch.zeros(batch_size, self.deterministic_dim, device=device, dtype=_dt)
+        stochastic = torch.zeros(batch_size, self.stochastic_dim, device=device, dtype=_dt)
         return LatentState(deterministic=deterministic, stochastic=stochastic)
 
     def _distribution_parameters(self, stats: Tensor) -> tuple[Tensor, Tensor]:
@@ -79,8 +84,12 @@ class RecurrentStateSpaceModel(nn.Module):
         if prev_state.stochastic is None or prev_state.deterministic is None:
             raise ValueError("prev_state must contain stochastic and deterministic tensors")
 
-        gru_input = self.input_layer(torch.cat([prev_state.stochastic, action], dim=-1))
-        return self.gru(gru_input, prev_state.deterministic)
+        _dt = self._dtype
+        stochastic = prev_state.stochastic.to(dtype=_dt)
+        deterministic = prev_state.deterministic.to(dtype=_dt)
+        action = action.to(dtype=_dt)
+        gru_input = self.input_layer(torch.cat([stochastic, action], dim=-1))
+        return self.gru(gru_input, deterministic)
 
     def imagine_step(self, prev_state: LatentState, action: Tensor) -> LatentState:
         deterministic = self._next_deterministic(prev_state, action)
@@ -96,6 +105,7 @@ class RecurrentStateSpaceModel(nn.Module):
 
     def observe_step(self, prev_state: LatentState, action: Tensor, embedding: Tensor) -> LatentState:
         deterministic = self._next_deterministic(prev_state, action)
+        embedding = embedding.to(dtype=self._dtype)
         posterior_stats = self.posterior_model(torch.cat([deterministic, embedding], dim=-1))
         posterior_mean, posterior_std = self._distribution_parameters(posterior_stats)
         stochastic = self._sample_stochastic(posterior_mean, posterior_std)

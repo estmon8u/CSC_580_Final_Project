@@ -48,6 +48,7 @@ class ObservationDecoder(nn.Module):
         )
 
     def forward(self, latent_features: Tensor) -> Tensor:
+        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
         projected = self.projection(latent_features)
         reshaped = projected.reshape(
             latent_features.shape[0],
@@ -75,4 +76,5 @@ class RewardPredictor(nn.Module):
         )
 
     def forward(self, latent_features: Tensor) -> Tensor:
+        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
         return self.network(latent_features)

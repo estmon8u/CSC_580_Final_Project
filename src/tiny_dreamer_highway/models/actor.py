@@ -32,4 +32,5 @@ class Actor(nn.Module):
         )
 
     def forward(self, latent_features: Tensor) -> Tensor:
+        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
         return self.policy(latent_features)
