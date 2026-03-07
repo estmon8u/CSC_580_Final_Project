@@ -17,6 +17,10 @@ def test_actor_and_critic_return_expected_shapes() -> None:
     assert torch.all(actions <= 1.0)
     assert torch.all(actions >= -1.0)
 
+    value_dist = critic.distribution(features)
+    log_prob = value_dist.log_prob(torch.randn(4, 1))
+    assert log_prob.shape == (4,)
+
 
 def test_imagine_trajectory_returns_expected_shapes() -> None:
     world_model = TinyWorldModel(

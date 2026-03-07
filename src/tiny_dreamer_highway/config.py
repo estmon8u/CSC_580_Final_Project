@@ -99,8 +99,10 @@ class ModelConfig(BaseModel):
     actor_min_std: float = Field(default=1e-4, gt=0.0, le=1.0)
     critic_hidden_dim: int = Field(default=200, ge=32, le=2048)
     critic_num_layers: int = Field(default=3, ge=1, le=6)
+    critic_distribution_std: float = Field(default=1.0, gt=0.0, le=10.0)
     reward_hidden_dim: int = Field(default=200, ge=32, le=2048)
     reward_num_layers: int = Field(default=2, ge=1, le=4)
+    reward_distribution_std: float = Field(default=1.0, gt=0.0, le=10.0)
     use_continue_model: bool = True
     continue_hidden_dim: int = Field(default=200, ge=32, le=2048)
     continue_num_layers: int = Field(default=2, ge=1, le=4)

@@ -180,6 +180,7 @@ def initialize_training_state(
         rssm_num_layers=mc.rssm_num_layers,
         reward_hidden_dim=mc.reward_hidden_dim,
         reward_num_layers=mc.reward_num_layers,
+        reward_distribution_std=mc.reward_distribution_std,
         use_continue_model=mc.use_continue_model,
         continue_hidden_dim=mc.continue_hidden_dim,
         continue_num_layers=mc.continue_num_layers,
@@ -198,6 +199,7 @@ def initialize_training_state(
         latent_dim=latent_dim,
         hidden_dim=mc.critic_hidden_dim,
         num_layers=mc.critic_num_layers,
+        distribution_std=mc.critic_distribution_std,
     ).to(device)
 
     _flash = config.training.use_flash_optimizer and device.type == "cuda"

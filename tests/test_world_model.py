@@ -22,6 +22,7 @@ def test_tiny_world_model_forward_returns_expected_shapes() -> None:
     assert output.posterior_state.features.shape == (4, 160)
     assert output.reconstruction.shape == (4, 1, 64, 64)
     assert output.predicted_reward.shape == (4, 1)
+    assert output.predicted_reward_std == 1.0
     assert output.predicted_continue is not None
     assert output.predicted_continue.shape == (4, 1)
 
@@ -49,6 +50,21 @@ def test_compute_world_model_losses_returns_expected_keys() -> None:
     assert losses["total_loss"].ndim == 0
     assert losses["kl_loss"].item() >= 0.0
     assert losses["continue_loss"].item() >= 0.0
+
+
+def test_reward_predictor_distribution_matches_batch_shape() -> None:
+    model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    observations = torch.randint(0, 256, (3, 1, 64, 64), dtype=torch.uint8)
+    actions = torch.randn(3, 2)
+    output = model(observations, actions)
+
+    reward_dist = model.reward_predictor.distribution(output.posterior_state.features)
+    log_prob = reward_dist.log_prob(torch.randn(3, 1))
+
+    assert log_prob.shape == (3,)
 
 
 def test_train_world_model_step_runs_optimizer_step() -> None:

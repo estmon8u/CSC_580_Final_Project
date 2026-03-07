@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import Iterator
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn, optim
 
 from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
@@ -236,7 +235,8 @@ def train_behavior_step(
             lambda_=lambda_,
             discounts=imagined_discounts,
         ).detach()
-        critic_loss = F.mse_loss(imagined.values, critic_targets)
+        critic_dist = critic.distribution(imagined.features)
+        critic_loss = -critic_dist.log_prob(critic_targets).mean()
 
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 

@@ -75,8 +75,10 @@ model:
   actor_min_std: 0.0001
   critic_hidden_dim: 200
   critic_num_layers: 3
+  critic_distribution_std: 1.0
   reward_hidden_dim: 200
   reward_num_layers: 2
+  reward_distribution_std: 1.0
   use_continue_model: true
   continue_hidden_dim: 200
   continue_num_layers: 2

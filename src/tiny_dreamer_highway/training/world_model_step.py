@@ -12,6 +12,7 @@ from contextlib import nullcontext
 
 import torch
 import torch.nn.functional as F
+from torch.distributions import Independent, Normal
 from torch import Tensor, optim
 
 from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOutput
@@ -58,7 +59,12 @@ def compute_world_model_losses(
 
     reward_targets = target_rewards.reshape(-1, 1).to(dtype=output.predicted_reward.dtype)
     reconstruction_loss = F.mse_loss(output.reconstruction, target_observations)
-    reward_loss = F.mse_loss(output.predicted_reward, reward_targets)
+    reward_std = 1.0 if output.predicted_reward_std is None else output.predicted_reward_std
+    reward_dist = Independent(
+        Normal(output.predicted_reward, torch.full_like(output.predicted_reward, reward_std)),
+        1,
+    )
+    reward_loss = -reward_dist.log_prob(reward_targets).mean()
     continue_loss = torch.zeros((), device=target_observations.device, dtype=reward_loss.dtype)
     if output.predicted_continue is not None and target_dones is not None:
         continue_targets = (1.0 - target_dones.reshape(-1, 1).to(dtype=output.predicted_continue.dtype))

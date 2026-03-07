@@ -26,6 +26,7 @@ class WorldModelOutput:
     posterior_state: LatentState
     reconstruction: Tensor
     predicted_reward: Tensor
+    predicted_reward_std: float | None = None
     predicted_continue: Tensor | None = None
 
 
@@ -42,6 +43,7 @@ class TinyWorldModel(nn.Module):
         rssm_num_layers: int = 2,
         reward_hidden_dim: int = 200,
         reward_num_layers: int = 2,
+        reward_distribution_std: float = 1.0,  # Configurable reward distribution std
         use_continue_model: bool = True,
         continue_hidden_dim: int = 200,
         continue_num_layers: int = 2,
@@ -68,6 +70,7 @@ class TinyWorldModel(nn.Module):
             latent_dim=latent_dim,
             hidden_dim=reward_hidden_dim,
             num_layers=reward_num_layers,
+            distribution_std=reward_distribution_std,  # Using configurable std
         )
         self.continue_predictor = (
             ContinuePredictor(
@@ -113,5 +116,6 @@ class TinyWorldModel(nn.Module):
             posterior_state=posterior_state,
             reconstruction=reconstruction,
             predicted_reward=predicted_reward,
+            predicted_reward_std=self.reward_predictor.distribution_std,
             predicted_continue=predicted_continue,
         )
