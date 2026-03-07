@@ -64,8 +64,14 @@ def _try_flash_adamw(
     """
     try:
         from flashoptim import FlashAdamW  # type: ignore[import-untyped]
-        return FlashAdamW(params, lr=lr)
-    except Exception:  # noqa: BLE001
+        optimizer = FlashAdamW(params, lr=lr)
+        print("[optimizer] using FlashAdamW", flush=True)
+        return optimizer
+    except ImportError:
+        print("[optimizer] flashoptim not installed — falling back to AdamW", flush=True)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        print(f"[optimizer] FlashAdamW failed ({exc!r}) — falling back to AdamW", flush=True)
         return None
 
 
@@ -76,6 +82,8 @@ def _make_optimizer(
     use_flash: bool = False,
 ) -> torch.optim.Optimizer:
     """Create an optimizer — FlashAdamW when requested and available, else AdamW."""
+    # Materialise the generator so it can survive a failed FlashAdamW attempt.
+    params = list(params)
     if use_flash:
         optimizer = _try_flash_adamw(params, lr)
         if optimizer is not None:
