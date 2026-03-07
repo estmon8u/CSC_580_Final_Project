@@ -41,9 +41,13 @@ class ReplayBuffer:
 
     def sample_batch(self, batch_size: int) -> ReplayBatch:
         if not self.can_sample(batch_size=batch_size):
-            raise ValueError("not enough transitions to sample a batch")
+            raise ValueError(
+                f"not enough transitions to sample a batch "
+                f"(requested {batch_size}, have {len(self.transitions)})"
+            )
 
-        indices = np.random.choice(len(self.transitions), size=batch_size, replace=False)
+        allow_replacement = batch_size > len(self.transitions)
+        indices = np.random.choice(len(self.transitions), size=batch_size, replace=allow_replacement)
         selected = [self.transitions[index] for index in indices]
         return ReplayBatch(
             observations=np.stack([item.observation for item in selected]).astype(np.uint8),

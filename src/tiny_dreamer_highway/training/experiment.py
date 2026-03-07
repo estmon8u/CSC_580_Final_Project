@@ -309,15 +309,18 @@ def run_training_experiment(
             actor_loss = latest_metrics.behavior_metrics.get("actor_loss")
             critic_loss = latest_metrics.behavior_metrics.get("critic_loss")
             checkpoint_text = checkpoint_file.name if checkpoint_file is not None else "-"
+            wt_str = f"{world_total:.4f}" if world_total is not None else "n/a"
+            al_str = f"{actor_loss:.4f}" if actor_loss is not None else "n/a"
+            cl_str = f"{critic_loss:.4f}" if critic_loss is not None else "n/a"
             print(
                 "[train] "
                 f"step={step}/{total_cycles} | "
                 f"warm={latest_metrics.warm_start_added} | "
                 f"policy={latest_metrics.policy_added} | "
                 f"replay={latest_metrics.replay_size} | "
-                f"world_total={world_total:.4f} | "
-                f"actor={actor_loss:.4f} | "
-                f"critic={critic_loss:.4f} | "
+                f"world_total={wt_str} | "
+                f"actor={al_str} | "
+                f"critic={cl_str} | "
                 f"cycle_s={cycle_seconds:.1f} | "
                 f"elapsed_s={elapsed_seconds:.1f} | "
                 f"checkpoint={checkpoint_text}",
