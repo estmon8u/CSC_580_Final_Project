@@ -14,6 +14,7 @@ Current notebook set:
 - `03_colab_baseline_run.ipynb` for the first real baseline comparison run
 - `04_colab_h100_run.ipynb` for the larger H100-oriented run after the baseline is stable
 - `05_colab_optimized_run.ipynb` for the optimized comparison run (AdamW, grad clipping, FlashAdamW, LR warm-up)
+- `06_colab_demo_videos.ipynb` for recording agent-driving demo videos from a trained checkpoint
 
 Suggested order:
 
@@ -22,5 +23,6 @@ Suggested order:
 3. run `03_colab_baseline_run.ipynb` for the first real comparison-quality baseline
 4. run `05_colab_optimized_run.ipynb` for the optimized comparison against the baseline
 5. run `04_colab_h100_run.ipynb` only after the baseline and optimized runs are stable
+6. run `06_colab_demo_videos.ipynb` after any training run to produce agent-driving GIFs
 
 The source of truth stays in `src/tiny_dreamer_highway/`.

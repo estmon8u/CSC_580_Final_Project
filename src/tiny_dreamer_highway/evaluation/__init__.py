@@ -12,6 +12,13 @@ from tiny_dreamer_highway.evaluation.artifact_bundle import (
 	export_submission_bundle,
 	write_bundle_manifest,
 )
+from tiny_dreamer_highway.evaluation.policy_rollout import (
+	DemoBundle,
+	RolloutResult,
+	record_demo_videos,
+	run_policy_episode,
+	save_rollout_gif,
+)
 from tiny_dreamer_highway.evaluation.prediction_eval import (
 	compute_frame_metrics,
 	evaluate_n_step_predictions,
@@ -33,6 +40,8 @@ from tiny_dreamer_highway.evaluation.visualization import (
 )
 
 __all__ = [
+	"DemoBundle",
+	"RolloutResult",
 	"build_prediction_video_frames",
 	"copy_artifact_files",
 	"compute_frame_metrics",
@@ -46,8 +55,11 @@ __all__ = [
 	"load_cycle_metrics_history",
 	"plot_training_history",
 	"plot_prediction_metrics",
+	"record_demo_videos",
 	"rollout_imagined_observations",
+	"run_policy_episode",
 	"save_prediction_comparison_grid",
+	"save_rollout_gif",
 	"summarize_training_history",
 	"write_bundle_manifest",
 ]
