@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn, optim
 
 from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
+from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
 @dataclass(slots=True)
@@ -47,6 +48,11 @@ def imagine_trajectory(
     critic: Critic,
     start_state: LatentState,
     horizon: int,
+    *,
+    longitudinal_scale: float = 1.0,
+    lateral_scale: float = 1.0,
+    smoothing_factor: float = 0.0,
+    lateral_control: bool = True,
 ) -> ImaginedTrajectory:
     if horizon <= 0:
         raise ValueError("horizon must be positive")
@@ -59,9 +65,17 @@ def imagine_trajectory(
     action_steps: list[Tensor] = []
     reward_steps: list[Tensor] = []
     value_steps: list[Tensor] = []
+    previous_action: Tensor | None = None
 
     for _ in range(horizon):
-        action = actor(state.features)
+        action = stabilize_action_tensor(
+            actor(state.features),
+            previous_action=previous_action,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_enabled=lateral_control,
+        )
         state = world_model.rssm.imagine_step(state, action)
         features = state.features
         reward = world_model.reward_predictor(features)
@@ -72,6 +86,7 @@ def imagine_trajectory(
         action_steps.append(action)
         reward_steps.append(reward)
         value_steps.append(value)
+        previous_action = action
 
     stacked_features = torch.stack(feature_steps, dim=0)
     stacked_actions = torch.stack(action_steps, dim=0)
@@ -127,12 +142,26 @@ def train_behavior_step(
     discount: float = 0.99,
     lambda_: float = 0.95,
     grad_clip_norm: float = 100.0,
+    longitudinal_scale: float = 1.0,
+    lateral_scale: float = 1.0,
+    smoothing_factor: float = 0.0,
+    lateral_control: bool = True,
 ) -> dict[str, float]:
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
     with frozen_params(world_model), frozen_params(critic):
-        imagined_for_actor = imagine_trajectory(world_model, actor, critic, start_state, horizon)
+        imagined_for_actor = imagine_trajectory(
+            world_model,
+            actor,
+            critic,
+            start_state,
+            horizon,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_control=lateral_control,
+        )
         actor_returns = td_lambda_returns(
             imagined_for_actor.rewards,
             imagined_for_actor.values,
@@ -150,7 +179,17 @@ def train_behavior_step(
     critic_optimizer.zero_grad(set_to_none=True)
 
     with frozen_params(world_model), frozen_params(actor):
-        imagined_for_critic = imagine_trajectory(world_model, actor, critic, start_state, horizon)
+        imagined_for_critic = imagine_trajectory(
+            world_model,
+            actor,
+            critic,
+            start_state,
+            horizon,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_control=lateral_control,
+        )
         critic_targets = td_lambda_returns(
             imagined_for_critic.rewards,
             imagined_for_critic.values,

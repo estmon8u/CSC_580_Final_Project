@@ -29,6 +29,7 @@ from tiny_dreamer_highway.training.experiment import (
     infer_env_shapes,
     resolve_training_device,
 )
+from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
 @dataclass(slots=True)
@@ -134,6 +135,7 @@ def run_policy_episode(
     device = next(world_model.parameters()).device
     observation, _ = env.reset(seed=seed)
     prev_state = world_model.rssm.initial_state(batch_size=1, device=device)
+    previous_action: Tensor | None = None
 
     frames: list[np.ndarray] = []
     rewards: list[float] = []
@@ -148,9 +150,17 @@ def run_policy_episode(
         for _ in range(max_steps):
             with torch.no_grad():
                 obs_tensor = _observation_to_tensor(observation, device)
-                action_tensor = actor(prev_state.features)
+                action_tensor = stabilize_action_tensor(
+                    actor(prev_state.features),
+                    previous_action=previous_action,
+                    longitudinal_scale=config.env.action.longitudinal_scale,
+                    lateral_scale=config.env.action.lateral_scale,
+                    smoothing_factor=config.env.action.smoothing_factor,
+                    lateral_enabled=config.env.action.lateral,
+                )
                 output = world_model(obs_tensor, action_tensor, prev_state=prev_state)
                 prev_state = output.posterior_state
+                previous_action = action_tensor
 
             action = action_tensor.squeeze(0).cpu().numpy().astype(np.float32)
             next_observation, reward, term, trunc, _ = env.step(action)

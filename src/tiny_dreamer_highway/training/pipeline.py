@@ -22,6 +22,7 @@ from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Crit
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
 from tiny_dreamer_highway.training.world_model_step import train_world_model_step
 from tiny_dreamer_highway.types import Transition
+from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
 @dataclass(slots=True)
@@ -84,18 +85,27 @@ def collect_actor_transitions(
     observation, _ = env.reset(seed=seed)
     model_device = _module_device(world_model)
     prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
+    previous_action: Tensor | None = None
     added = 0
 
     try:
         for _ in range(steps):
             with torch.no_grad():
-                action_tensor = actor(prev_state.features)
+                action_tensor = stabilize_action_tensor(
+                    actor(prev_state.features),
+                    previous_action=previous_action,
+                    longitudinal_scale=config.env.action.longitudinal_scale,
+                    lateral_scale=config.env.action.lateral_scale,
+                    smoothing_factor=config.env.action.smoothing_factor,
+                    lateral_enabled=config.env.action.lateral,
+                )
                 action = action_tensor.squeeze(0).cpu().numpy().astype(np.float32)
                 observation_tensor = _observation_to_tensor(
                     np.asarray(observation, dtype=np.uint8)
                 ).to(model_device)
                 posterior = world_model(observation_tensor, action_tensor, prev_state=prev_state)
                 prev_state = posterior.posterior_state
+                previous_action = action_tensor
 
             next_observation, reward, terminated, truncated, _ = env.step(action)
             done = bool(terminated or truncated)
@@ -114,6 +124,7 @@ def collect_actor_transitions(
             if done:
                 observation, _ = env.reset()
                 prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
+                previous_action = None
     finally:
         env.close()
 
@@ -183,6 +194,10 @@ def run_training_cycle(
             start_state,
             horizon=training_config.imagination_horizon,
             grad_clip_norm=training_config.grad_clip_norm,
+            longitudinal_scale=config.env.action.longitudinal_scale,
+            lateral_scale=config.env.action.lateral_scale,
+            smoothing_factor=config.env.action.smoothing_factor,
+            lateral_control=config.env.action.lateral,
         )
         behavior_metrics_list.append(behavior_metrics)
 

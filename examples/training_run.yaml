@@ -19,6 +19,9 @@ env:
     type: continuous
     longitudinal: true
     lateral: true
+    longitudinal_scale: 1.0
+    lateral_scale: 0.35
+    smoothing_factor: 0.6
 replay:
   capacity: 50000
   sequence_length: 8

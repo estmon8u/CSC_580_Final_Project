@@ -19,6 +19,9 @@ class ActionConfig(BaseModel):
     type: Literal["continuous"] = "continuous"
     longitudinal: bool = True
     lateral: bool = True
+    longitudinal_scale: float = Field(default=1.0, gt=0.0, le=1.0)
+    lateral_scale: float = Field(default=0.35, gt=0.0, le=1.0)
+    smoothing_factor: float = Field(default=0.6, ge=0.0, lt=1.0)
 
 
 class EnvConfig(BaseModel):

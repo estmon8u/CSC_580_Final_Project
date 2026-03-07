@@ -6,6 +6,7 @@ Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
 """
 
+from tiny_dreamer_highway.utils.action_processing import stabilize_action_array, stabilize_action_tensor
 from tiny_dreamer_highway.utils.seeding import set_global_seeds
 
-__all__ = ["set_global_seeds"]
+__all__ = ["set_global_seeds", "stabilize_action_array", "stabilize_action_tensor"]
