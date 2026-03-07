@@ -21,6 +21,7 @@ def test_tiny_world_model_forward_returns_expected_shapes() -> None:
     assert output.posterior_state.stochastic is not None
     assert output.posterior_state.features.shape == (4, 160)
     assert output.reconstruction.shape == (4, 1, 64, 64)
+    assert output.predicted_observation_std == 1.0
     assert output.predicted_reward.shape == (4, 1)
     assert output.predicted_reward_std == 1.0
     assert output.predicted_continue is not None
@@ -41,6 +42,8 @@ def test_compute_world_model_losses_returns_expected_keys() -> None:
 
     assert set(losses.keys()) == {
         "reconstruction_loss",
+        "reconstruction_mse",
+        "observation_log_prob",
         "reward_loss",
         "continue_loss",
         "kl_loss",
@@ -85,6 +88,8 @@ def test_train_world_model_step_runs_optimizer_step() -> None:
 
     assert metrics.keys() == {
         "reconstruction_loss",
+        "reconstruction_mse",
+        "observation_log_prob",
         "reward_loss",
         "continue_loss",
         "kl_loss",

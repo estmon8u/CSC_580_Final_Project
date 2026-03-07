@@ -70,6 +70,8 @@ def compute_sequence_world_model_losses(
     state: LatentState | None = None
     outputs: list[WorldModelOutput] = []
     reconstruction_loss = torch.zeros((), device=observations.device)
+    reconstruction_mse = torch.zeros((), device=observations.device)
+    observation_log_prob = torch.zeros((), device=observations.device)
     reward_loss = torch.zeros((), device=observations.device)
     continue_loss = torch.zeros((), device=observations.device)
     kl_loss = torch.zeros((), device=observations.device)
@@ -86,6 +88,8 @@ def compute_sequence_world_model_losses(
             continue_loss_weight=continue_loss_weight,
         )
         reconstruction_loss = reconstruction_loss + step_losses["reconstruction_loss"]
+        reconstruction_mse = reconstruction_mse + step_losses["reconstruction_mse"]
+        observation_log_prob = observation_log_prob + step_losses["observation_log_prob"]
         reward_loss = reward_loss + step_losses["reward_loss"]
         continue_loss = continue_loss + step_losses["continue_loss"]
         kl_loss = kl_loss + step_losses["kl_loss"]
@@ -94,6 +98,8 @@ def compute_sequence_world_model_losses(
         state = output.posterior_state
 
     reconstruction_loss = reconstruction_loss / sequence_length
+    reconstruction_mse = reconstruction_mse / sequence_length
+    observation_log_prob = observation_log_prob / sequence_length
     reward_loss = reward_loss / sequence_length
     continue_loss = continue_loss / sequence_length
     kl_loss = kl_loss / sequence_length
@@ -106,6 +112,8 @@ def compute_sequence_world_model_losses(
     )
     return outputs, {
         "reconstruction_loss": reconstruction_loss,
+        "reconstruction_mse": reconstruction_mse,
+        "observation_log_prob": observation_log_prob,
         "reward_loss": reward_loss,
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,

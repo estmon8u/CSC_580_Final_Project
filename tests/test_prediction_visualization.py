@@ -14,9 +14,9 @@ from tiny_dreamer_highway.evaluation import (
 
 def make_step_metrics() -> list[dict[str, float]]:
     return [
-        {"step": 1.0, "mse": 0.15, "psnr": 8.2, "ssim": 0.12},
-        {"step": 2.0, "mse": 0.18, "psnr": 7.9, "ssim": 0.09},
-        {"step": 3.0, "mse": 0.22, "psnr": 7.1, "ssim": 0.05},
+        {"step": 1.0, "mse": 0.15, "psnr": 8.2, "ssim": 0.12, "nll": 120.0},
+        {"step": 2.0, "mse": 0.18, "psnr": 7.9, "ssim": 0.09, "nll": 140.0},
+        {"step": 3.0, "mse": 0.22, "psnr": 7.1, "ssim": 0.05, "nll": 150.0},
     ]
 
 

@@ -11,10 +11,10 @@ from tiny_dreamer_highway.evaluation.training_analysis import (
 
 def write_metrics_csv(path: Path) -> Path:
     path.write_text(
-        "step,warm_start_added,policy_added,replay_size,world_model/reconstruction_loss,world_model/reward_loss,world_model/total_loss,behavior/actor_loss,behavior/critic_loss,behavior/imagined_reward_mean,behavior/imagined_value_mean\n"
-        "1,64,8,72,0.20,0.10,0.30,-0.05,0.20,0.01,0.05\n"
-        "2,0,8,80,0.15,0.08,0.23,-0.10,0.18,0.03,0.07\n"
-        "3,0,8,88,0.12,0.05,0.17,-0.12,0.15,0.04,0.09\n",
+        "step,warm_start_added,policy_added,replay_size,world_model/reconstruction_loss,world_model/reconstruction_mse,world_model/reward_loss,world_model/continue_loss,world_model/total_loss,behavior/actor_loss,behavior/critic_loss,behavior/imagined_reward_mean,behavior/imagined_value_mean,evaluation/mean_reward,evaluation/crash_rate\n"
+        "1,64,8,72,0.20,0.010,0.10,0.08,0.30,-0.05,0.20,0.01,0.05,1.5,0.60\n"
+        "2,0,8,80,0.15,0.008,0.08,0.06,0.23,-0.10,0.18,0.03,0.07,2.0,0.35\n"
+        "3,0,8,88,0.12,0.006,0.05,0.04,0.17,-0.12,0.15,0.04,0.09,3.2,0.20\n",
         encoding="utf-8",
     )
     return path
@@ -39,6 +39,8 @@ def test_summarize_training_history_finds_best_steps(tmp_path: Path) -> None:
     assert summary["last_step"] == 3
     assert summary["best_world_model_step"] == 3
     assert summary["best_imagined_reward_step"] == 3
+    assert summary["best_eval_reward_step"] == 3
+    assert summary["best_eval_mean_reward"] == 3.2
     assert summary["largest_replay_size"] == 88
 
 

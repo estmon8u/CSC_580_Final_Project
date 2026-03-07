@@ -18,6 +18,16 @@ def test_compute_frame_metrics_returns_expected_keys() -> None:
     assert metrics["mse"] >= 0.0
 
 
+def test_compute_frame_metrics_includes_nll_when_std_provided() -> None:
+    predicted = torch.zeros(2, 1, 8, 8)
+    target = torch.ones(2, 1, 8, 8)
+
+    metrics = compute_frame_metrics(predicted, target, observation_std=1.0)
+
+    assert set(metrics.keys()) == {"mse", "psnr", "ssim", "nll"}
+    assert metrics["nll"] >= 0.0
+
+
 def test_rollout_imagined_observations_returns_expected_shape() -> None:
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
@@ -49,4 +59,5 @@ def test_evaluate_n_step_predictions_returns_per_step_metrics_and_summary() -> N
 
     assert results["predictions"].shape == (2, 3, 1, 64, 64)
     assert len(results["step_metrics"]) == 3
-    assert set(results["summary"].keys()) == {"mse_mean", "psnr_mean", "ssim_mean"}
+    assert set(results["summary"].keys()) == {"mse_mean", "psnr_mean", "ssim_mean", "nll_mean"}
+    assert all("nll" in item for item in results["step_metrics"])

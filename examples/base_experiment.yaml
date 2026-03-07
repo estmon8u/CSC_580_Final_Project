@@ -71,6 +71,7 @@ model:
   critic_hidden_dim: 64
   critic_num_layers: 1
   critic_distribution_std: 1.0
+  observation_distribution_std: 1.0
   reward_hidden_dim: 64
   reward_num_layers: 1
   reward_distribution_std: 1.0

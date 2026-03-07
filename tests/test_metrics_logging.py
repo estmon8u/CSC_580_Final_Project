@@ -18,6 +18,8 @@ def make_metrics() -> PipelineCycleMetrics:
         replay_size=20,
         world_model_metrics={
             "reconstruction_loss": 0.1,
+            "reconstruction_mse": 0.02,
+            "observation_log_prob": -0.1,
             "reward_loss": 0.2,
             "total_loss": 0.3,
         },
@@ -39,6 +41,7 @@ def test_flatten_cycle_metrics_returns_prefixed_record() -> None:
     assert record["step"] == 3
     assert record["warm_start_added"] == 16
     assert record["world_model/total_loss"] == 0.3
+    assert record["world_model/reconstruction_mse"] == 0.02
     assert record["behavior/critic_loss"] == 0.5
     assert record["evaluation/mean_reward"] == 1.2
 

@@ -7,6 +7,8 @@
 
 Use notebooks in this folder for polished experiments, debugging views, and final presentation assets.
 
+Phase 3 adds probabilistic observation modeling to the world model. The training and evaluation notebooks now surface observation negative log-likelihood alongside the existing MSE/PSNR/SSIM and real-policy metrics.
+
 Current notebook set:
 
 - `01_colab_setup_and_smoke_tests.ipynb` for Colab environment setup plus end-to-end smoke validation against pushed package code

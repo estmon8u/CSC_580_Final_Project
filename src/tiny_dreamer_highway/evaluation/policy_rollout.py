@@ -81,6 +81,7 @@ def _build_models(
         hidden_dim=mc.hidden_dim,
         rssm_min_std=mc.rssm_min_std,
         rssm_num_layers=mc.rssm_num_layers,
+        observation_distribution_std=mc.observation_distribution_std,
         reward_hidden_dim=mc.reward_hidden_dim,
         reward_num_layers=mc.reward_num_layers,
         reward_distribution_std=mc.reward_distribution_std,

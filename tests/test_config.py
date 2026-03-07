@@ -13,3 +13,4 @@ def test_load_experiment_config_reads_example() -> None:
     assert config.training.imagination_horizon == 5
     assert config.model.reward_distribution_std == 1.0
     assert config.model.critic_distribution_std == 1.0
+    assert config.model.observation_distribution_std == 1.0

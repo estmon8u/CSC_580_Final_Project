@@ -26,6 +26,7 @@ class WorldModelOutput:
     posterior_state: LatentState
     reconstruction: Tensor
     predicted_reward: Tensor
+    predicted_observation_std: float | None = None
     predicted_reward_std: float | None = None
     predicted_continue: Tensor | None = None
 
@@ -41,6 +42,7 @@ class TinyWorldModel(nn.Module):
         hidden_dim: int = 200,
         rssm_min_std: float = 0.1,
         rssm_num_layers: int = 2,
+        observation_distribution_std: float = 1.0,
         reward_hidden_dim: int = 200,
         reward_num_layers: int = 2,
         reward_distribution_std: float = 1.0,  # Configurable reward distribution std
@@ -65,7 +67,11 @@ class TinyWorldModel(nn.Module):
             num_layers=rssm_num_layers,
         )
         latent_dim = deterministic_dim + stochastic_dim
-        self.decoder = ObservationDecoder(latent_dim=latent_dim, output_shape=observation_shape)
+        self.decoder = ObservationDecoder(
+            latent_dim=latent_dim,
+            output_shape=observation_shape,
+            distribution_std=observation_distribution_std,
+        )
         self.reward_predictor = RewardPredictor(
             latent_dim=latent_dim,
             hidden_dim=reward_hidden_dim,
@@ -115,6 +121,7 @@ class TinyWorldModel(nn.Module):
             prior_state=prior_state,
             posterior_state=posterior_state,
             reconstruction=reconstruction,
+            predicted_observation_std=self.decoder.distribution_std,
             predicted_reward=predicted_reward,
             predicted_reward_std=self.reward_predictor.distribution_std,
             predicted_continue=predicted_continue,

@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 
 import torch
+from torch.distributions import Independent, Normal
 from torch import Tensor
 
 from tiny_dreamer_highway.models import TinyWorldModel
@@ -20,10 +21,15 @@ def _normalize_observations(observations: Tensor, dtype: torch.dtype) -> Tensor:
     normalized = observations.to(dtype=dtype)
     if observations.dtype == torch.uint8:
         normalized = normalized / 255.0
-    return normalized
+    return normalized.clamp(0.0, 1.0)
 
 
-def compute_frame_metrics(predicted: Tensor, target: Tensor) -> dict[str, float]:
+def compute_frame_metrics(
+    predicted: Tensor,
+    target: Tensor,
+    *,
+    observation_std: float | None = None,
+) -> dict[str, float]:
     if predicted.shape != target.shape:
         raise ValueError("predicted and target must have matching shapes")
 
@@ -47,11 +53,21 @@ def compute_frame_metrics(predicted: Tensor, target: Tensor) -> dict[str, float]
         / ((mu_x.pow(2) + mu_y.pow(2) + c1) * (var_x + var_y + c2))
     ).mean().item()
 
-    return {
+    metrics = {
         "mse": float(mse),
         "psnr": float(psnr),
         "ssim": float(ssim),
     }
+    if observation_std is not None:
+        if observation_std <= 0:
+            raise ValueError("observation_std must be positive")
+        raw_predicted = predicted.to(dtype=torch.float32)
+        observation_dist = Independent(
+            Normal(raw_predicted, torch.full_like(raw_predicted, observation_std)),
+            raw_predicted.ndim - 1,
+        )
+        metrics["nll"] = float(-observation_dist.log_prob(target).mean().item())
+    return metrics
 
 
 def rollout_imagined_observations(
@@ -95,10 +111,15 @@ def evaluate_n_step_predictions(
         raise ValueError("future_actions and target_observations must agree on batch and horizon")
 
     predicted_observations = rollout_imagined_observations(model, seed_observation, future_actions)
+    observation_std = getattr(model.decoder, "distribution_std", None)
 
     step_metrics: list[dict[str, float]] = []
     for step in range(predicted_observations.shape[1]):
-        metrics = compute_frame_metrics(predicted_observations[:, step], target_observations[:, step])
+        metrics = compute_frame_metrics(
+            predicted_observations[:, step],
+            target_observations[:, step],
+            observation_std=observation_std,
+        )
         metrics["step"] = float(step + 1)
         step_metrics.append(metrics)
 
@@ -107,6 +128,8 @@ def evaluate_n_step_predictions(
         "psnr_mean": float(sum(item["psnr"] for item in step_metrics) / len(step_metrics)),
         "ssim_mean": float(sum(item["ssim"] for item in step_metrics) / len(step_metrics)),
     }
+    if all("nll" in item for item in step_metrics):
+        summary["nll_mean"] = float(sum(item["nll"] for item in step_metrics) / len(step_metrics))
 
     return {
         "predictions": predicted_observations,

@@ -45,11 +45,14 @@ replay:
 training:
   batch_size: 32
   imagination_horizon: 15
+  discount: 0.99
+  lambda_: 0.95
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008
   kl_weight: 1.0
   free_nats: 3.0
+  continue_loss_weight: 1.0
   grad_clip_norm: 100.0
   lr_warmup_steps: 50
   world_model_updates_per_cycle: 2
@@ -58,15 +61,29 @@ training:
   warm_start_steps: 1000
   policy_steps: 32
   checkpoint_interval: 25
+evaluation:
+  interval: 25
+  episodes: 3
+  max_steps: 200
 model:
   embedding_dim: 1024
   deterministic_dim: 200
   stochastic_dim: 30
   hidden_dim: 200
   rssm_num_layers: 2
+  rssm_min_std: 0.1
   actor_hidden_dim: 200
   actor_num_layers: 2
+  actor_init_std: 5.0
+  actor_mean_scale: 5.0
+  actor_min_std: 0.0001
   critic_hidden_dim: 200
   critic_num_layers: 3
+  critic_distribution_std: 1.0
+  observation_distribution_std: 1.0
   reward_hidden_dim: 200
   reward_num_layers: 2
+  reward_distribution_std: 1.0
+  use_continue_model: true
+  continue_hidden_dim: 200
+  continue_num_layers: 2

@@ -32,13 +32,14 @@ All core components are complete:
 - replay buffer, environment factory, and random rollout collection
 - CNN encoder, RSSM (multi-layer prior/posterior), decoder, reward predictor
 - combined world model with Kaiming initialization
+- probabilistic observation, reward, and value heads with fixed-std likelihood losses
 - actor with TanhTransform, `init_std=5.0`, and `mean_scale=5.0` for exploration
 - critic with configurable depth (default 3 layers)
 - corrected TD(λ) returns using next-state values
 - imagination rollouts with WM posterior passthrough to behavior learning
 - alternating collect/train pipeline
 - checkpoint save/load and metrics export
-- n-step prediction evaluation, plots, videos, and submission bundles
+- n-step prediction evaluation, plots, videos, submission bundles, and observation-NLL reporting
 - AMP (bfloat16) and FlashAdamW support for H100
 - 113 passing tests
 

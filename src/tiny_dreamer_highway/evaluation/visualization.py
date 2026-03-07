@@ -72,13 +72,20 @@ def plot_prediction_metrics(
     mse = [float(item["mse"]) for item in step_metrics]
     psnr = [float(item["psnr"]) for item in step_metrics]
     ssim = [float(item["ssim"]) for item in step_metrics]
+    has_nll = all("nll" in item for item in step_metrics)
+    nll = [float(item["nll"]) for item in step_metrics] if has_nll else None
 
-    figure, axes = plt.subplots(1, 3, figsize=(12, 3.5))
+    num_plots = 4 if has_nll else 3
+    figure, axes = plt.subplots(1, num_plots, figsize=(4 * num_plots, 3.5))
+    if num_plots == 1:
+        axes = [axes]
     series = [
         ("MSE", mse, "tab:red"),
         ("PSNR", psnr, "tab:blue"),
         ("SSIM", ssim, "tab:green"),
     ]
+    if has_nll and nll is not None:
+        series.append(("NLL", nll, "tab:purple"))
     for axis, (label, values, color) in zip(axes, series, strict=True):
         axis.plot(steps, values, marker="o", color=color)
         axis.set_title(label)

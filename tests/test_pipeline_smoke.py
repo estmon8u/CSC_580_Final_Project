@@ -131,6 +131,8 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
     assert metrics.replay_size == 19
     assert set(metrics.world_model_metrics.keys()) == {
         "reconstruction_loss",
+        "reconstruction_mse",
+        "observation_log_prob",
         "reward_loss",
 	    "continue_loss",
 	    "kl_loss",

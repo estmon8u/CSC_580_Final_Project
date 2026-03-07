@@ -19,10 +19,13 @@ class ObservationDecoder(nn.Module):
         latent_dim: int,
         output_shape: tuple[int, int, int] = (1, 64, 64),
         hidden_channels: tuple[int, int, int, int] = (256, 128, 64, 32),
+        distribution_std: float = 1.0,
     ) -> None:
         super().__init__()
         if latent_dim <= 0:
             raise ValueError("latent_dim must be positive")
+        if distribution_std <= 0:
+            raise ValueError("distribution_std must be positive")
 
         out_channels, height, width = output_shape
         if min(out_channels, height, width) <= 0:
@@ -31,6 +34,7 @@ class ObservationDecoder(nn.Module):
             raise ValueError("output height and width must be divisible by 16")
 
         self.output_shape = output_shape
+        self.distribution_std = distribution_std
         self.base_height = height // 16
         self.base_width = width // 16
         self.base_channels = hidden_channels[0]
@@ -48,6 +52,11 @@ class ObservationDecoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(hidden_channels[3], out_channels, kernel_size=4, stride=2, padding=1),
         )
+
+    def distribution(self, latent_features: Tensor) -> Independent:
+        mean = self.forward(latent_features)
+        std = torch.full_like(mean, self.distribution_std)
+        return Independent(Normal(mean, std), len(self.output_shape))
 
     def forward(self, latent_features: Tensor) -> Tensor:
         latent_features = latent_features.to(dtype=next(self.parameters()).dtype)

@@ -21,6 +21,16 @@ def test_observation_decoder_supports_multi_channel_outputs() -> None:
     assert reconstruction.shape == (2, 3, 64, 64)
 
 
+def test_observation_decoder_distribution_matches_batch_shape() -> None:
+    decoder = ObservationDecoder(latent_dim=160, output_shape=(1, 64, 64), distribution_std=0.5)
+    latent_features = torch.randn(4, 160)
+
+    distribution = decoder.distribution(latent_features)
+    log_prob = distribution.log_prob(torch.randn(4, 1, 64, 64))
+
+    assert log_prob.shape == (4,)
+
+
 def test_reward_predictor_returns_scalar_reward_per_batch_item() -> None:
     predictor = RewardPredictor(latent_dim=160, hidden_dim=64)
     latent_features = torch.randn(5, 160)
