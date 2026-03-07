@@ -1,0 +1,47 @@
+# Name: Esteban
+# Course: CSC 580 AI 2
+# Assignment: Final Project — Dream the Road
+# AI tools consulted: GitHub Copilot
+#
+# Optimized config for baseline-vs-optimized comparison.
+# Changes over training_run.yaml:
+#   - AdamW instead of Adam (better weight decay handling)
+#   - Gradient clipping at 100.0 (prevents NaN from GRU unrolling)
+#   - FlashAdamW on Linux+CUDA (lower optimizer memory footprint)
+#   - 50-step LR warm-up (stabilises early noisy gradients)
+# Keeps the same seed, cycles, batch_size and horizon so the
+# comparison isolates the effect of optimizer / stability changes.
+
+seed: 7
+device: cuda
+env:
+  env_id: highway-v0
+  observation_height: 64
+  observation_width: 64
+  frame_stack: 1
+  max_episode_steps: 40
+  action:
+    type: continuous
+    longitudinal: true
+    lateral: true
+replay:
+  capacity: 50000
+  sequence_length: 8
+  batch_size: 32
+training:
+  batch_size: 32
+  imagination_horizon: 15
+  world_model_lr: 0.0003
+  actor_lr: 0.00008
+  critic_lr: 0.00008
+  kl_weight: 1.0
+  free_nats: 3.0
+  grad_clip_norm: 100.0
+  use_flash_optimizer: true
+  lr_warmup_steps: 50
+  world_model_updates_per_cycle: 2
+  behavior_updates_per_cycle: 2
+  cycles: 500
+  warm_start_steps: 1000
+  policy_steps: 32
+  checkpoint_interval: 25

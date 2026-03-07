@@ -164,6 +164,7 @@ def run_training_cycle(
             rewards,
             kl_weight=training_config.kl_weight,
             free_nats=training_config.free_nats,
+            grad_clip_norm=training_config.grad_clip_norm,
         )
         world_model_metrics_list.append(world_model_metrics)
 
@@ -181,6 +182,7 @@ def run_training_cycle(
             critic_optimizer,
             start_state,
             horizon=training_config.imagination_horizon,
+            grad_clip_norm=training_config.grad_clip_norm,
         )
         behavior_metrics_list.append(behavior_metrics)
 

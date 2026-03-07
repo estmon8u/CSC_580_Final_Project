@@ -101,6 +101,7 @@ def train_world_model_step(
     *,
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
+    grad_clip_norm: float = 100.0,
 ) -> tuple[WorldModelOutput, dict[str, float]]:
     optimizer.zero_grad(set_to_none=True)
     output = model(observations, actions)
@@ -108,5 +109,6 @@ def train_world_model_step(
         output, observations, rewards, kl_weight=kl_weight, free_nats=free_nats,
     )
     losses["total_loss"].backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
     optimizer.step()
     return output, {name: float(value.detach().cpu().item()) for name, value in losses.items()}

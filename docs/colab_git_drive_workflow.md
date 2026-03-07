@@ -21,12 +21,13 @@ Use Google Drive for:
 ## Update loop
 
 1. modify code locally in VS Code
-2. run `pytest`
-3. commit and push only after tests pass
-4. open Colab and mount Google Drive
-5. clone or pull the repository into the Colab workspace
-6. install the package with `python -m pip install -e .`
-7. run a small sanity pass before expensive cells
+2. Create test cases for the new code or changes
+3. run `pytest` for all new and existing tests to validate the changes don't break existing functionality
+4. commit and push only after tests pass
+5. open Colab and mount Google Drive
+6. clone or pull the repository into the Colab workspace
+7. install the package with `python -m pip install -e .`
+8. run a small sanity pass before expensive cells
 
 ## Dependency management
 

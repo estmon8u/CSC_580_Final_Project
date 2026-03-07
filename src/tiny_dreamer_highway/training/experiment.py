@@ -8,6 +8,7 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -54,6 +55,35 @@ def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], in
     return observation_shape, action_dim
 
 
+def _make_optimizer(
+    params,
+    lr: float,
+    *,
+    use_flash: bool = False,
+) -> torch.optim.Optimizer:
+    """Create an AdamW optimizer, preferring FlashAdamW on Linux+CUDA when requested."""
+    if use_flash:
+        try:
+            from flashoptim import FlashAdamW  # type: ignore[import-untyped]
+            return FlashAdamW(params, lr=lr)
+        except ImportError:
+            pass
+    return torch.optim.AdamW(params, lr=lr)
+
+
+def _make_warmup_scheduler(
+    optimizer: torch.optim.Optimizer,
+    warmup_steps: int,
+) -> torch.optim.lr_scheduler.LambdaLR | None:
+    """Linear warm-up from ~0 to base LR over *warmup_steps* optimizer steps."""
+    if warmup_steps <= 0:
+        return None
+    return torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=lambda step: min(1.0, (step + 1) / warmup_steps),
+    )
+
+
 def initialize_training_state(
     config: ExperimentConfig,
 ) -> tuple[
@@ -74,12 +104,15 @@ def initialize_training_state(
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
     actor = Actor(latent_dim=latent_dim, action_dim=action_dim).to(device)
     critic = Critic(latent_dim=latent_dim).to(device)
-    world_model_optimizer = torch.optim.Adam(
+
+    use_flash = config.training.use_flash_optimizer and device.type == "cuda" and sys.platform == "linux"
+    world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,
+        use_flash=use_flash,
     )
-    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=config.training.actor_lr)
-    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=config.training.critic_lr)
+    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr, use_flash=use_flash)
+    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr, use_flash=use_flash)
     return (
         replay_buffer,
         world_model,
@@ -144,6 +177,11 @@ def run_training_experiment(
             if stale_path.exists():
                 stale_path.unlink()
 
+    # LR warm-up schedulers (None when warmup_steps == 0)
+    wm_scheduler = _make_warmup_scheduler(world_model_optimizer, config.training.lr_warmup_steps)
+    actor_scheduler = _make_warmup_scheduler(actor_optimizer, config.training.lr_warmup_steps)
+    critic_scheduler = _make_warmup_scheduler(critic_optimizer, config.training.lr_warmup_steps)
+
     latest_checkpoint: Path | None = None
     latest_metrics = PipelineCycleMetrics(
         warm_start_added=0,
@@ -181,6 +219,11 @@ def run_training_experiment(
             policy_steps=cycle_policy_steps,
             seed=config.seed + step - 1,
         )
+
+        # Step LR warm-up schedulers (no-op when scheduler is None)
+        for scheduler in (wm_scheduler, actor_scheduler, critic_scheduler):
+            if scheduler is not None:
+                scheduler.step()
 
         checkpoint_file = None
         if step % save_every == 0 or step == total_cycles:

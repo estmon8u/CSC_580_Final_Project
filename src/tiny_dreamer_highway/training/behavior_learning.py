@@ -126,6 +126,7 @@ def train_behavior_step(
     horizon: int,
     discount: float = 0.99,
     lambda_: float = 0.95,
+    grad_clip_norm: float = 100.0,
 ) -> dict[str, float]:
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
@@ -142,6 +143,7 @@ def train_behavior_step(
         actor_loss = -actor_returns.mean()
 
     actor_loss.backward()
+    torch.nn.utils.clip_grad_norm_(actor.parameters(), max_norm=grad_clip_norm)
     actor_optimizer.step()
 
     actor_optimizer.zero_grad(set_to_none=True)
@@ -159,6 +161,7 @@ def train_behavior_step(
         critic_loss = F.mse_loss(imagined_for_critic.values, critic_targets)
 
     critic_loss.backward()
+    torch.nn.utils.clip_grad_norm_(critic.parameters(), max_norm=grad_clip_norm)
     critic_optimizer.step()
 
     metrics = {
