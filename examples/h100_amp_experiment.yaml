@@ -19,7 +19,7 @@ env:
   observation_height: 64
   observation_width: 64
   frame_stack: 1
-  max_episode_steps: 40
+  max_episode_steps: 100
   action:
     type: continuous
     longitudinal: true
