@@ -62,6 +62,16 @@ def test_replay_buffer_sample_sequences_do_not_cross_episode_boundaries() -> Non
         assert not any(transition.done for transition in sequence[:-1])
 
 
+def test_replay_buffer_can_sample_sequences_requires_valid_contiguous_sequence() -> None:
+    buffer = ReplayBuffer(capacity=8)
+    for seed in range(8):
+        transition = make_transition(seed)
+        transition.done = seed % 2 == 0
+        buffer.add(transition)
+
+    assert not buffer.can_sample(batch_size=4, sequence_length=3)
+
+
 def test_replay_buffer_sample_sequences_use_chronological_order_after_wraparound() -> None:
     buffer = ReplayBuffer(capacity=4)
     for seed in range(6):

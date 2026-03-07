@@ -41,8 +41,26 @@ class ReplayBuffer:
             self.transitions[self._position] = transition
         self._position = (self._position + 1) % self.capacity
 
+    def valid_sequence_start_indices(self, sequence_length: int) -> list[int]:
+        if sequence_length <= 0:
+            raise ValueError("sequence_length must be positive")
+
+        ordered = self._ordered_transitions()
+        max_start = len(ordered) - sequence_length
+        if max_start < 0:
+            return []
+
+        return [
+            start_index
+            for start_index in range(max_start + 1)
+            if not any(transition.done for transition in ordered[start_index : start_index + sequence_length - 1])
+        ]
+
     def can_sample(self, batch_size: int, sequence_length: int = 1) -> bool:
-        return len(self.transitions) >= max(batch_size, sequence_length)
+        if sequence_length <= 1:
+            return len(self.transitions) >= max(batch_size, sequence_length)
+
+        return len(self.valid_sequence_start_indices(sequence_length)) > 0
 
     def sample_batch(self, batch_size: int) -> ReplayBatch:
         if not self.can_sample(batch_size=batch_size):
@@ -69,15 +87,7 @@ class ReplayBuffer:
             raise ValueError("not enough transitions to sample sequences")
 
         ordered = self._ordered_transitions()
-        max_start = len(ordered) - sequence_length
-        if max_start < 0:
-            raise ValueError("sequence_length exceeds replay size")
-
-        valid_start_indices = [
-            start_index
-            for start_index in range(max_start + 1)
-            if not any(transition.done for transition in ordered[start_index : start_index + sequence_length - 1])
-        ]
+        valid_start_indices = self.valid_sequence_start_indices(sequence_length)
         if not valid_start_indices:
             raise ValueError("no valid sequences available without crossing episode boundaries")
 
