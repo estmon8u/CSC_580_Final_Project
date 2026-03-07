@@ -1,0 +1,67 @@
+# Name: Esteban
+# Course: CSC 580 AI 2
+# Assignment: Final Project — Dream the Road
+# AI tools consulted: GitHub Copilot
+#
+# Safer H100 screening config.
+# Purpose:
+#   - reduce wasted long-run compute when a policy is clearly not transferring
+#   - favor world-model quality over aggressive behavior optimization
+#   - support staged checkpoint-and-demo evaluation in Colab notebook 07
+#
+# Key differences vs h100_amp_experiment.yaml:
+#   - smaller batch (128 instead of 256)
+#   - shorter imagination horizon (8 instead of 20)
+#   - more world-model updates than behavior updates (24 vs 4)
+#   - lower actor/critic learning rates
+#   - shorter episode cap (60) for earlier screening
+
+seed: 7
+device: cuda
+env:
+  env_id: highway-v0
+  observation_height: 64
+  observation_width: 64
+  frame_stack: 1
+  max_episode_steps: 60
+  action:
+    type: continuous
+    longitudinal: true
+    lateral: true
+    longitudinal_scale: 1.0
+    lateral_scale: 0.35
+    smoothing_factor: 0.6
+  reward:
+    collision_reward: -1.0
+    right_lane_reward: 0.1
+    high_speed_reward: 0.4
+    lane_change_reward: 0.0
+    normalize_reward: true
+    reward_speed_range: [20.0, 30.0]
+    offroad_terminal: true
+    offroad_penalty: 3.0
+    steering_penalty: 0.05
+    steering_change_penalty: 0.1
+replay:
+  capacity: 100000
+  sequence_length: 8
+  batch_size: 128
+training:
+  batch_size: 128
+  imagination_horizon: 8
+  world_model_lr: 0.0003
+  actor_lr: 0.00003
+  critic_lr: 0.00005
+  kl_weight: 1.0
+  free_nats: 3.0
+  grad_clip_norm: 100.0
+  lr_warmup_steps: 50
+  use_amp: true
+  amp_dtype: bfloat16
+  use_flash_optimizer: true
+  world_model_updates_per_cycle: 24
+  behavior_updates_per_cycle: 4
+  cycles: 800
+  warm_start_steps: 1000
+  policy_steps: 32
+  checkpoint_interval: 25
