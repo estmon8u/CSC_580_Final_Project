@@ -126,6 +126,20 @@ def initialize_training_state(
     critic = Critic(latent_dim=latent_dim).to(device)
 
     _flash = config.training.use_flash_optimizer and device.type == "cuda"
+
+    # FlashAdamW requires model weights in half precision — cast when both
+    # AMP *and* flash are requested so the fused optimizer can manage master
+    # weights internally.
+    if _flash and config.training.use_amp:
+        _dtype = resolve_amp_dtype(config.training.amp_dtype)
+        world_model = world_model.to(_dtype)
+        actor = actor.to(_dtype)
+        critic = critic.to(_dtype)
+        print(
+            f"[optimizer] cast models to {config.training.amp_dtype} for FlashAdamW",
+            flush=True,
+        )
+
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,
