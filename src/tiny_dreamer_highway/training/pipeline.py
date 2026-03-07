@@ -108,7 +108,7 @@ def collect_actor_transitions(
                     smoothing_factor=config.env.action.smoothing_factor,
                     lateral_enabled=config.env.action.lateral,
                 )
-                action = action_tensor.squeeze(0).cpu().numpy().astype(np.float32)
+                action = action_tensor.squeeze(0).float().cpu().numpy()
                 observation_tensor = _observation_to_tensor(
                     np.asarray(observation, dtype=np.uint8)
                 ).to(model_device)

@@ -130,7 +130,7 @@ def save_prediction_comparison_grid(
         for column, (axis, frame, cmap) in enumerate(zip(axes[row], frames, cmaps, strict=True)):
             if row == 0:
                 axis.set_title(column_titles[column])
-            axis.imshow(frame.numpy(), cmap=cmap, vmin=0.0, vmax=1.0)
+            axis.imshow(frame.float().numpy(), cmap=cmap, vmin=0.0, vmax=1.0)
             axis.axis("off")
 
         axes[row, 0].set_ylabel(f"Step {row + 1}", rotation=90, labelpad=12)

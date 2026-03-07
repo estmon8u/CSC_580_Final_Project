@@ -162,7 +162,7 @@ def run_policy_episode(
                 prev_state = output.posterior_state
                 previous_action = action_tensor
 
-            action = action_tensor.squeeze(0).cpu().numpy().astype(np.float32)
+            action = action_tensor.squeeze(0).float().cpu().numpy()
             next_observation, reward, term, trunc, _ = env.step(action)
             rewards.append(float(reward))
 
