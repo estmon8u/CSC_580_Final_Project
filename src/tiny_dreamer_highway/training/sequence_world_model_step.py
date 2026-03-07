@@ -19,8 +19,82 @@ from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOu
 from tiny_dreamer_highway.training.world_model_step import (
     _backward_and_step,
     compute_world_model_losses,
+    gaussian_kl_divergence,
 )
 from tiny_dreamer_highway.types import ReplaySequenceBatch, Transition
+
+
+def compute_latent_overshooting_losses(
+    model: TinyWorldModel,
+    outputs: list[WorldModelOutput],
+    actions: Tensor,
+    *,
+    overshooting_horizon: int,
+) -> dict[str, Tensor]:
+    if overshooting_horizon <= 0 or len(outputs) <= 1:
+        zero = torch.zeros((), device=actions.device)
+        return {
+            "overshooting_kl_loss": zero,
+            "overshooting_feature_mse": zero,
+            "overshooting_pairs": zero,
+        }
+
+    max_horizon = min(overshooting_horizon, len(outputs) - 1)
+    kl_total = torch.zeros((), device=actions.device)
+    feature_mse_total = torch.zeros((), device=actions.device)
+    pair_count = 0
+
+    for start_index in range(len(outputs) - 1):
+        start_state = outputs[start_index].posterior_state
+        if start_state.deterministic is None or start_state.stochastic is None:
+            continue
+
+        rollout_horizon = min(max_horizon, len(outputs) - start_index - 1)
+        rollout_actions = actions[:, start_index + 1 : start_index + 1 + rollout_horizon]
+        detached_start_state = LatentState(
+            deterministic=start_state.deterministic.detach(),
+            stochastic=start_state.stochastic.detach(),
+        )
+        imagined_states = model.rssm.imagine_rollout(detached_start_state, rollout_actions)
+
+        for offset, imagined_state in enumerate(imagined_states, start=1):
+            target_state = outputs[start_index + offset].posterior_state
+            if (
+                imagined_state.dist_mean is None
+                or imagined_state.dist_std is None
+                or target_state.dist_mean is None
+                or target_state.dist_std is None
+                or target_state.deterministic is None
+                or target_state.stochastic is None
+            ):
+                continue
+
+            kl_total = kl_total + gaussian_kl_divergence(
+                target_state.dist_mean.detach(),
+                target_state.dist_std.detach(),
+                imagined_state.dist_mean,
+                imagined_state.dist_std,
+            )
+            target_features = torch.cat(
+                [target_state.stochastic.detach(), target_state.deterministic.detach()],
+                dim=-1,
+            )
+            feature_mse_total = feature_mse_total + torch.mean((imagined_state.features - target_features) ** 2)
+            pair_count += 1
+
+    if pair_count == 0:
+        zero = torch.zeros((), device=actions.device)
+        return {
+            "overshooting_kl_loss": zero,
+            "overshooting_feature_mse": zero,
+            "overshooting_pairs": zero,
+        }
+
+    return {
+        "overshooting_kl_loss": kl_total / pair_count,
+        "overshooting_feature_mse": feature_mse_total / pair_count,
+        "overshooting_pairs": torch.tensor(float(pair_count), device=actions.device),
+    }
 
 
 def stack_sequence_batch(sequences: list[list[Transition]]) -> ReplaySequenceBatch:
@@ -58,6 +132,8 @@ def compute_sequence_world_model_losses(
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
+    overshooting_horizon: int = 0,
+    overshooting_kl_weight: float = 0.0,
 ) -> tuple[list[WorldModelOutput], dict[str, Tensor]]:
     if observations.ndim != 5:
         raise ValueError("observations must have shape (B, T, C, H, W)")
@@ -104,11 +180,18 @@ def compute_sequence_world_model_losses(
     continue_loss = continue_loss / sequence_length
     kl_loss = kl_loss / sequence_length
     kl_loss_raw = kl_loss_raw / sequence_length
+    overshooting_losses = compute_latent_overshooting_losses(
+        model,
+        outputs,
+        actions,
+        overshooting_horizon=overshooting_horizon,
+    )
     total_loss = (
         reconstruction_loss
         + reward_loss
         + kl_weight * kl_loss
         + continue_loss_weight * continue_loss
+        + overshooting_kl_weight * overshooting_losses["overshooting_kl_loss"]
     )
     return outputs, {
         "reconstruction_loss": reconstruction_loss,
@@ -118,6 +201,9 @@ def compute_sequence_world_model_losses(
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
         "kl_loss_raw": kl_loss_raw.detach(),
+        "overshooting_kl_loss": overshooting_losses["overshooting_kl_loss"],
+        "overshooting_feature_mse": overshooting_losses["overshooting_feature_mse"],
+        "overshooting_pairs": overshooting_losses["overshooting_pairs"],
         "total_loss": total_loss,
     }
 
@@ -133,6 +219,8 @@ def train_sequence_world_model_step(
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
+    overshooting_horizon: int = 0,
+    overshooting_kl_weight: float = 0.0,
     grad_clip_norm: float = 100.0,
     grad_scaler: torch.amp.GradScaler | None = None,
     amp_context: torch.amp.autocast | None = None,
@@ -147,6 +235,8 @@ def train_sequence_world_model_step(
             kl_weight=kl_weight,
             free_nats=free_nats,
             continue_loss_weight=continue_loss_weight,
+            overshooting_horizon=overshooting_horizon,
+            overshooting_kl_weight=overshooting_kl_weight,
         )
 
     _backward_and_step(

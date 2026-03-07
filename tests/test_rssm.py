@@ -69,3 +69,16 @@ def test_rssm_rolls_forward_multiple_steps() -> None:
     assert state.deterministic.shape == (2, 64)
     assert state.stochastic.shape == (2, 16)
     assert state.features.shape == (2, 80)
+
+
+def test_rssm_imagine_rollout_returns_one_state_per_action_step() -> None:
+    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=64, deterministic_dim=64, stochastic_dim=16)
+    state = rssm.initial_state(batch_size=2)
+    actions = torch.randn(2, 3, 2)
+
+    rollout = rssm.imagine_rollout(state, actions)
+
+    assert len(rollout) == 3
+    assert all(item.deterministic is not None for item in rollout)
+    assert all(item.stochastic is not None for item in rollout)
+    assert rollout[-1].features.shape == (2, 80)

@@ -21,6 +21,7 @@ from tiny_dreamer_highway.evaluation.policy_rollout import (
 )
 from tiny_dreamer_highway.evaluation.prediction_eval import (
 	compute_frame_metrics,
+	evaluate_latent_rollout_consistency,
 	evaluate_n_step_predictions,
 	rollout_imagined_observations,
 )
@@ -45,6 +46,7 @@ __all__ = [
 	"build_prediction_video_frames",
 	"copy_artifact_files",
 	"compute_frame_metrics",
+	"evaluate_latent_rollout_consistency",
 	"create_bundle_archive",
 	"evaluate_n_step_predictions",
 	"export_prediction_artifacts",

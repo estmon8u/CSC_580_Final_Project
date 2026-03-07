@@ -58,6 +58,8 @@ class TrainingConfig(BaseModel):
     imagination_horizon: int = Field(default=5, ge=2, le=64)
     discount: float = Field(default=0.99, ge=0.0, le=1.0)
     lambda_: float = Field(default=0.95, ge=0.0, le=1.0)
+    overshooting_horizon: int = Field(default=3, ge=0, le=32)
+    overshooting_kl_weight: float = Field(default=0.5, ge=0.0, le=10.0)
     world_model_lr: float = Field(default=3e-4, gt=0.0)
     actor_lr: float = Field(default=8e-5, gt=0.0)
     critic_lr: float = Field(default=8e-5, gt=0.0)

@@ -15,6 +15,7 @@ from torch.distributions import Independent, Normal
 from torch import Tensor
 
 from tiny_dreamer_highway.models import TinyWorldModel
+from tiny_dreamer_highway.training.world_model_step import gaussian_kl_divergence
 
 
 def _normalize_observations(observations: Tensor, dtype: torch.dtype) -> Tensor:
@@ -133,6 +134,73 @@ def evaluate_n_step_predictions(
 
     return {
         "predictions": predicted_observations,
+        "step_metrics": step_metrics,
+        "summary": summary,
+    }
+
+
+def evaluate_latent_rollout_consistency(
+    model: TinyWorldModel,
+    seed_observation: Tensor,
+    future_actions: Tensor,
+    target_observations: Tensor,
+) -> dict[str, object]:
+    if seed_observation.ndim != 4:
+        raise ValueError("seed_observation must have shape (B, C, H, W)")
+    if future_actions.ndim != 3:
+        raise ValueError("future_actions must have shape (B, H, action_dim)")
+    if target_observations.ndim != 5:
+        raise ValueError("target_observations must have shape (B, H, C, H, W)")
+    if future_actions.shape[:2] != target_observations.shape[:2]:
+        raise ValueError("future_actions and target_observations must agree on batch and horizon")
+
+    batch_size = seed_observation.shape[0]
+    device = seed_observation.device
+    zero_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+
+    with torch.no_grad():
+        initial_state = model.rssm.initial_state(batch_size=batch_size, device=device)
+        embedding = model.encoder.encode(seed_observation)
+        grounded_state = model.rssm.observe_step(initial_state, zero_action, embedding)
+        imagined_state = grounded_state
+
+        step_metrics: list[dict[str, float]] = []
+        for step in range(future_actions.shape[1]):
+            action = future_actions[:, step]
+            imagined_state = model.rssm.imagine_step(imagined_state, action)
+            target_embedding = model.encoder.encode(target_observations[:, step])
+            grounded_state = model.rssm.observe_step(grounded_state, action, target_embedding)
+
+            deterministic_mse = torch.mean(
+                (imagined_state.deterministic - grounded_state.deterministic) ** 2
+            ).item()
+            stochastic_mse = torch.mean(
+                (imagined_state.stochastic - grounded_state.stochastic) ** 2
+            ).item()
+            feature_mse = torch.mean((imagined_state.features - grounded_state.features) ** 2).item()
+            prior_posterior_kl = gaussian_kl_divergence(
+                grounded_state.dist_mean,
+                grounded_state.dist_std,
+                imagined_state.dist_mean,
+                imagined_state.dist_std,
+            ).item()
+            step_metrics.append(
+                {
+                    "step": float(step + 1),
+                    "deterministic_mse": float(deterministic_mse),
+                    "stochastic_mse": float(stochastic_mse),
+                    "feature_mse": float(feature_mse),
+                    "prior_posterior_kl": float(prior_posterior_kl),
+                }
+            )
+
+    summary = {
+        "deterministic_mse_mean": float(sum(item["deterministic_mse"] for item in step_metrics) / len(step_metrics)),
+        "stochastic_mse_mean": float(sum(item["stochastic_mse"] for item in step_metrics) / len(step_metrics)),
+        "feature_mse_mean": float(sum(item["feature_mse"] for item in step_metrics) / len(step_metrics)),
+        "prior_posterior_kl_mean": float(sum(item["prior_posterior_kl"] for item in step_metrics) / len(step_metrics)),
+    }
+    return {
         "step_metrics": step_metrics,
         "summary": summary,
     }

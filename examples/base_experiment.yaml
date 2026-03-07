@@ -40,6 +40,8 @@ training:
   imagination_horizon: 5
   discount: 0.99
   lambda_: 0.95
+  overshooting_horizon: 2
+  overshooting_kl_weight: 0.5
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008

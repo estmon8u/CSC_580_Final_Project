@@ -137,6 +137,9 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
 	    "continue_loss",
 	    "kl_loss",
 	    "kl_loss_raw",
+        "overshooting_kl_loss",
+        "overshooting_feature_mse",
+        "overshooting_pairs",
         "total_loss",
     }
     assert set(metrics.behavior_metrics.keys()) == {
@@ -179,10 +182,15 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
         world_calls["count"] += 1
         return [], {
             "reconstruction_loss": 1.0,
+            "reconstruction_mse": 0.1,
+            "observation_log_prob": -1.0,
             "reward_loss": 0.5,
 	        "continue_loss": 0.1,
             "kl_loss": 3.0,
             "kl_loss_raw": 2.0,
+            "overshooting_kl_loss": 0.3,
+            "overshooting_feature_mse": 0.2,
+            "overshooting_pairs": 6.0,
             "total_loss": 4.5,
         }
 

@@ -115,6 +115,19 @@ class RecurrentStateSpaceModel(nn.Module):
             dist_std=prior_std,
         )
 
+    def imagine_rollout(self, start_state: LatentState, actions: Tensor) -> list[LatentState]:
+        if actions.ndim != 3:
+            raise ValueError("actions must have shape (B, T, action_dim)")
+        if start_state.deterministic is None or start_state.stochastic is None:
+            raise ValueError("start_state must contain deterministic and stochastic tensors")
+
+        state = start_state
+        rollout: list[LatentState] = []
+        for step in range(actions.shape[1]):
+            state = self.imagine_step(state, actions[:, step])
+            rollout.append(state)
+        return rollout
+
     def observe_step(self, prev_state: LatentState, action: Tensor, embedding: Tensor) -> LatentState:
         deterministic = self._next_deterministic(prev_state, action)
         embedding = embedding.to(dtype=self._dtype)

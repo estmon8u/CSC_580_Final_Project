@@ -65,10 +65,14 @@ def test_compute_sequence_world_model_losses_returns_outputs_per_step() -> None:
         "continue_loss",
         "kl_loss",
         "kl_loss_raw",
+        "overshooting_kl_loss",
+        "overshooting_feature_mse",
+        "overshooting_pairs",
         "total_loss",
     }
     assert losses["total_loss"].ndim == 0
     assert losses["kl_loss"].item() >= 0.0
+    assert losses["overshooting_kl_loss"].item() >= 0.0
 
 
 def test_train_sequence_world_model_step_updates_parameters() -> None:
@@ -95,6 +99,9 @@ def test_train_sequence_world_model_step_updates_parameters() -> None:
         "continue_loss",
         "kl_loss",
         "kl_loss_raw",
+        "overshooting_kl_loss",
+        "overshooting_feature_mse",
+        "overshooting_pairs",
         "total_loss",
     }
     assert metrics["total_loss"] >= 0.0

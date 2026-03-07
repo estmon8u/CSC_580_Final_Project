@@ -85,6 +85,8 @@ def plot_training_history(
     world_recon_mse = _float_series(history, "world_model/reconstruction_mse")
     world_reward = [float(row["world_model/reward_loss"]) for row in history]
     world_continue = _float_series(history, "world_model/continue_loss")
+    overshooting_kl = _float_series(history, "world_model/overshooting_kl_loss")
+    overshooting_feature_mse = _float_series(history, "world_model/overshooting_feature_mse")
     actor_loss = [float(row["behavior/actor_loss"]) for row in history]
     critic_loss = [float(row["behavior/critic_loss"]) for row in history]
     imagined_reward = [float(row["behavior/imagined_reward_mean"]) for row in history]
@@ -106,8 +108,12 @@ def plot_training_history(
     axes[0, 0].plot(steps, world_reward, label="reward")
     if not all(value != value for value in world_continue):
         axes[0, 0].plot(steps, world_continue, label="continue", linestyle="-.")
+    if not all(value != value for value in overshooting_kl):
+        axes[0, 0].plot(steps, overshooting_kl, label="overshooting kl", linestyle="--")
+    if not all(value != value for value in overshooting_feature_mse):
+        axes[0, 0].plot(steps, overshooting_feature_mse, label="overshooting feature mse", linestyle=(0, (1, 1)))
     if has_kl:
-        axes[0, 0].plot(steps, world_kl, label="kl", linestyle="--")
+        axes[0, 0].plot(steps, world_kl, label="kl", linestyle=":")
     axes[0, 0].set_title("World-model losses")
     axes[0, 0].set_xlabel("Step")
     axes[0, 0].legend()

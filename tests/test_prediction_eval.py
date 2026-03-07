@@ -2,6 +2,7 @@ import torch
 
 from tiny_dreamer_highway.evaluation import (
     compute_frame_metrics,
+    evaluate_latent_rollout_consistency,
     evaluate_n_step_predictions,
     rollout_imagined_observations,
 )
@@ -61,3 +62,28 @@ def test_evaluate_n_step_predictions_returns_per_step_metrics_and_summary() -> N
     assert len(results["step_metrics"]) == 3
     assert set(results["summary"].keys()) == {"mse_mean", "psnr_mean", "ssim_mean", "nll_mean"}
     assert all("nll" in item for item in results["step_metrics"])
+
+
+def test_evaluate_latent_rollout_consistency_returns_drift_summary() -> None:
+    model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    seed_observation = torch.randint(0, 256, (2, 1, 64, 64), dtype=torch.uint8)
+    future_actions = torch.randn(2, 3, 2)
+    target_observations = torch.randint(0, 256, (2, 3, 1, 64, 64), dtype=torch.uint8)
+
+    results = evaluate_latent_rollout_consistency(
+        model,
+        seed_observation,
+        future_actions,
+        target_observations,
+    )
+
+    assert len(results["step_metrics"]) == 3
+    assert set(results["summary"].keys()) == {
+        "deterministic_mse_mean",
+        "stochastic_mse_mean",
+        "feature_mse_mean",
+        "prior_posterior_kl_mean",
+    }

@@ -33,6 +33,7 @@ All core components are complete:
 - CNN encoder, RSSM (multi-layer prior/posterior), decoder, reward predictor
 - combined world model with Kaiming initialization
 - probabilistic observation, reward, and value heads with fixed-std likelihood losses
+- latent overshooting / multi-step consistency regularization for the RSSM
 - actor with TanhTransform, `init_std=5.0`, and `mean_scale=5.0` for exploration
 - critic with configurable depth (default 3 layers)
 - corrected TD(λ) returns using next-state values
