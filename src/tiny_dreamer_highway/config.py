@@ -74,12 +74,29 @@ class TrainingConfig(BaseModel):
     checkpoint_interval: int = Field(default=5, ge=1, le=1_000_000)
 
 
+class ModelConfig(BaseModel):
+    """Configurable model dimensions — matches DreamerV1 reference defaults."""
+
+    embedding_dim: int = Field(default=1024, ge=32, le=4096)
+    deterministic_dim: int = Field(default=200, ge=32, le=2048)
+    stochastic_dim: int = Field(default=30, ge=8, le=512)
+    hidden_dim: int = Field(default=200, ge=32, le=2048)
+    rssm_num_layers: int = Field(default=2, ge=1, le=4)
+    actor_hidden_dim: int = Field(default=200, ge=32, le=2048)
+    actor_num_layers: int = Field(default=2, ge=1, le=4)
+    critic_hidden_dim: int = Field(default=200, ge=32, le=2048)
+    critic_num_layers: int = Field(default=3, ge=1, le=6)
+    reward_hidden_dim: int = Field(default=200, ge=32, le=2048)
+    reward_num_layers: int = Field(default=2, ge=1, le=4)
+
+
 class ExperimentConfig(BaseModel):
     seed: int = 7
     device: str = "cpu"
     env: EnvConfig = Field(default_factory=EnvConfig)
     replay: ReplayConfig = Field(default_factory=ReplayConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
+    model: ModelConfig = Field(default_factory=ModelConfig)
 
 
 def load_experiment_config(path: str | Path) -> ExperimentConfig:

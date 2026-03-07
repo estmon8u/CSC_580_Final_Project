@@ -16,6 +16,7 @@ from torch import Tensor, nn
 from tiny_dreamer_highway.models.decoder import ObservationDecoder, RewardPredictor
 from tiny_dreamer_highway.models.encoder import LatentState, ObservationEncoder
 from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
+from tiny_dreamer_highway.utils.weight_init import apply_kaiming_init
 
 
 @dataclass(slots=True)
@@ -32,9 +33,13 @@ class TinyWorldModel(nn.Module):
         self,
         observation_shape: tuple[int, int, int] = (1, 64, 64),
         action_dim: int = 2,
-        embedding_dim: int = 256,
-        deterministic_dim: int = 128,
-        stochastic_dim: int = 32,
+        embedding_dim: int = 1024,
+        deterministic_dim: int = 200,
+        stochastic_dim: int = 30,
+        hidden_dim: int = 200,
+        rssm_num_layers: int = 2,
+        reward_hidden_dim: int = 200,
+        reward_num_layers: int = 2,
     ) -> None:
         super().__init__()
         channels, height, width = observation_shape
@@ -48,10 +53,19 @@ class TinyWorldModel(nn.Module):
             embedding_dim=embedding_dim,
             deterministic_dim=deterministic_dim,
             stochastic_dim=stochastic_dim,
+            hidden_dim=hidden_dim,
+            num_layers=rssm_num_layers,
         )
         latent_dim = deterministic_dim + stochastic_dim
         self.decoder = ObservationDecoder(latent_dim=latent_dim, output_shape=observation_shape)
-        self.reward_predictor = RewardPredictor(latent_dim=latent_dim)
+        self.reward_predictor = RewardPredictor(
+            latent_dim=latent_dim,
+            hidden_dim=reward_hidden_dim,
+            num_layers=reward_num_layers,
+        )
+
+        # Kaiming uniform initialization for all Conv/Linear layers
+        apply_kaiming_init(self)
 
     def forward(
         self,

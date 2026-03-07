@@ -120,10 +120,30 @@ def initialize_training_state(
         torch.set_float32_matmul_precision("high")
     observation_shape, action_dim = infer_env_shapes(config)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
-    world_model = TinyWorldModel(observation_shape=observation_shape, action_dim=action_dim).to(device)
+    mc = config.model
+    world_model = TinyWorldModel(
+        observation_shape=observation_shape,
+        action_dim=action_dim,
+        embedding_dim=mc.embedding_dim,
+        deterministic_dim=mc.deterministic_dim,
+        stochastic_dim=mc.stochastic_dim,
+        hidden_dim=mc.hidden_dim,
+        rssm_num_layers=mc.rssm_num_layers,
+        reward_hidden_dim=mc.reward_hidden_dim,
+        reward_num_layers=mc.reward_num_layers,
+    ).to(device)
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
-    actor = Actor(latent_dim=latent_dim, action_dim=action_dim).to(device)
-    critic = Critic(latent_dim=latent_dim).to(device)
+    actor = Actor(
+        latent_dim=latent_dim,
+        action_dim=action_dim,
+        hidden_dim=mc.actor_hidden_dim,
+        num_layers=mc.actor_num_layers,
+    ).to(device)
+    critic = Critic(
+        latent_dim=latent_dim,
+        hidden_dim=mc.critic_hidden_dim,
+        num_layers=mc.critic_num_layers,
+    ).to(device)
 
     _flash = config.training.use_flash_optimizer and device.type == "cuda"
 

@@ -19,10 +19,11 @@ class RecurrentStateSpaceModel(nn.Module):
         self,
         action_dim: int,
         embedding_dim: int,
-        deterministic_dim: int = 128,
-        stochastic_dim: int = 32,
-        hidden_dim: int = 128,
+        deterministic_dim: int = 200,
+        stochastic_dim: int = 30,
+        hidden_dim: int = 200,
         min_std: float = 0.1,
+        num_layers: int = 2,
     ) -> None:
         super().__init__()
         if action_dim <= 0:
@@ -47,16 +48,27 @@ class RecurrentStateSpaceModel(nn.Module):
         )
         self.gru = nn.GRUCell(hidden_dim, deterministic_dim)
 
-        self.prior_model = nn.Sequential(
-            nn.Linear(deterministic_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, 2 * stochastic_dim),
+        # Multi-layer prior and posterior networks
+        self.prior_model = self._build_fc_network(
+            deterministic_dim, hidden_dim, 2 * stochastic_dim, num_layers,
         )
-        self.posterior_model = nn.Sequential(
-            nn.Linear(deterministic_dim + embedding_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, 2 * stochastic_dim),
+        self.posterior_model = self._build_fc_network(
+            deterministic_dim + embedding_dim, hidden_dim, 2 * stochastic_dim, num_layers,
         )
+
+    @staticmethod
+    def _build_fc_network(
+        in_dim: int, hidden_dim: int, out_dim: int, num_layers: int,
+    ) -> nn.Sequential:
+        """Build a fully connected network with ``num_layers`` hidden layers."""
+        layers: list[nn.Module] = []
+        current_dim = in_dim
+        for _ in range(num_layers):
+            layers.append(nn.Linear(current_dim, hidden_dim))
+            layers.append(nn.ELU())
+            current_dim = hidden_dim
+        layers.append(nn.Linear(current_dim, out_dim))
+        return nn.Sequential(*layers)
 
     @property
     def _dtype(self) -> torch.dtype:

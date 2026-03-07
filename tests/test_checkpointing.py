@@ -18,9 +18,12 @@ def test_checkpoint_path_formats_step_with_padding(tmp_path: Path) -> None:
 
 def test_save_and_load_checkpoint_round_trip(tmp_path: Path) -> None:
     torch.manual_seed(7)
-    world_model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
-    actor = Actor(latent_dim=160, action_dim=2)
-    critic = Critic(latent_dim=160)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
     world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
     actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
     critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)

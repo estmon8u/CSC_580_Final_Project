@@ -5,8 +5,8 @@ from tiny_dreamer_highway.training import imagine_trajectory, td_lambda_returns,
 
 
 def test_actor_and_critic_return_expected_shapes() -> None:
-    actor = Actor(latent_dim=160, action_dim=2)
-    critic = Critic(latent_dim=160)
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
     features = torch.randn(4, 160)
 
     actions = actor(features)
@@ -19,9 +19,12 @@ def test_actor_and_critic_return_expected_shapes() -> None:
 
 
 def test_imagine_trajectory_returns_expected_shapes() -> None:
-    world_model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
-    actor = Actor(latent_dim=160, action_dim=2)
-    critic = Critic(latent_dim=160)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
     start_state = world_model.rssm.initial_state(batch_size=3)
 
     trajectory = imagine_trajectory(world_model, actor, critic, start_state, horizon=5)
@@ -40,15 +43,22 @@ def test_td_lambda_returns_matches_one_step_case_when_lambda_zero() -> None:
 
     returns = td_lambda_returns(rewards, values, discount=0.5, lambda_=0.0)
 
-    expected = rewards + 0.5 * values
+    # With λ=0, returns[t] = rewards[t] + discount * next_values[t]
+    # next_values = [values[1], bootstrap=values[-1]] = [[[20.0]], [[20.0]]]
+    # step 0: 1.0 + 0.5 * 20.0 = 11.0
+    # step 1: 2.0 + 0.5 * 20.0 = 12.0
+    expected = torch.tensor([[[11.0]], [[12.0]]])
     assert torch.allclose(returns, expected)
 
 
 def test_train_behavior_step_updates_actor_and_critic_without_changing_world_model() -> None:
     torch.manual_seed(7)
-    world_model = TinyWorldModel(observation_shape=(1, 64, 64), action_dim=2)
-    actor = Actor(latent_dim=160, action_dim=2)
-    critic = Critic(latent_dim=160)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
     actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
     critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
     start_state = world_model.rssm.initial_state(batch_size=4)

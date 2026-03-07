@@ -4,7 +4,10 @@ from tiny_dreamer_highway.models import RecurrentStateSpaceModel
 
 
 def test_rssm_initial_state_shapes() -> None:
-    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=256)
+    rssm = RecurrentStateSpaceModel(
+        action_dim=2, embedding_dim=256,
+        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+    )
 
     state = rssm.initial_state(batch_size=4)
 
@@ -16,7 +19,10 @@ def test_rssm_initial_state_shapes() -> None:
 
 
 def test_rssm_imagine_step_preserves_latent_shapes() -> None:
-    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=256)
+    rssm = RecurrentStateSpaceModel(
+        action_dim=2, embedding_dim=256,
+        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+    )
     prev_state = rssm.initial_state(batch_size=3)
     action = torch.randn(3, 2)
 
@@ -31,7 +37,10 @@ def test_rssm_imagine_step_preserves_latent_shapes() -> None:
 
 
 def test_rssm_observe_step_incorporates_encoder_embedding() -> None:
-    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=256)
+    rssm = RecurrentStateSpaceModel(
+        action_dim=2, embedding_dim=256,
+        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+    )
     prev_state = rssm.initial_state(batch_size=5)
     action = torch.randn(5, 2)
     embedding = torch.randn(5, 256)

@@ -184,6 +184,8 @@ def run_training_cycle(
     model_device = _module_device(world_model)
 
     world_model_metrics_list: list[dict[str, float]] = []
+    # Collect posterior states from WM training for behavior update start states
+    all_posterior_states: list[LatentState] = []
     for _ in range(training_config.world_model_updates_per_cycle):
         sequences = replay_buffer.sample_sequences(
             batch_size=batch_size, sequence_length=sequence_length,
@@ -193,7 +195,7 @@ def run_training_cycle(
         actions = torch.as_tensor(seq_batch.actions, dtype=torch.float32, device=model_device)
         rewards = torch.as_tensor(seq_batch.rewards, dtype=torch.float32, device=model_device)
 
-        _, world_model_metrics = train_sequence_world_model_step(
+        outputs, world_model_metrics = train_sequence_world_model_step(
             world_model,
             world_model_optimizer,
             observations,
@@ -206,13 +208,35 @@ def run_training_cycle(
             amp_context=amp_context,
         )
         world_model_metrics_list.append(world_model_metrics)
+        # Gather detached posteriors from all time steps
+        for wm_output in outputs:
+            all_posterior_states.append(
+                LatentState(
+                    deterministic=wm_output.posterior_state.deterministic.detach(),
+                    stochastic=wm_output.posterior_state.stochastic.detach(),
+                )
+            )
 
     behavior_metrics_list: list[dict[str, float]] = []
     for _ in range(training_config.behavior_updates_per_cycle):
-        batch = replay_buffer.sample_batch(batch_size=batch_size)
-        observations = torch.as_tensor(batch.observations, device=model_device)
-        actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
-        start_state = seed_latent_state(world_model, observations, actions, amp_context=amp_context)
+        # Sample start states from collected WM posteriors
+        if all_posterior_states:
+            # Flatten all posteriors: each entry is (B, dim), concatenate across time & batches
+            all_det = torch.cat([s.deterministic for s in all_posterior_states], dim=0)
+            all_sto = torch.cat([s.stochastic for s in all_posterior_states], dim=0)
+            # Random subsample to batch_size
+            n_total = all_det.shape[0]
+            indices = torch.randint(0, n_total, (batch_size,), device=model_device)
+            start_state = LatentState(
+                deterministic=all_det[indices],
+                stochastic=all_sto[indices],
+            )
+        else:
+            # Fallback: seed from replay buffer
+            batch = replay_buffer.sample_batch(batch_size=batch_size)
+            observations = torch.as_tensor(batch.observations, device=model_device)
+            actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
+            start_state = seed_latent_state(world_model, observations, actions, amp_context=amp_context)
         behavior_metrics = train_behavior_step(
             world_model,
             actor,

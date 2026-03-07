@@ -142,10 +142,13 @@ def td_lambda_returns(
     if bootstrap is None:
         bootstrap = values[-1]
 
+    # Build next-step value targets: values[1], values[2], ..., bootstrap
+    next_values = torch.cat([values[1:], bootstrap.unsqueeze(0)], dim=0)
+
     returns = torch.zeros_like(rewards)
     next_return = bootstrap
     for step in range(rewards.shape[0] - 1, -1, -1):
-        blended_target = (1.0 - lambda_) * values[step] + lambda_ * next_return
+        blended_target = (1.0 - lambda_) * next_values[step] + lambda_ * next_return
         next_return = rewards[step] + discount * blended_target
         returns[step] = next_return
     return returns
