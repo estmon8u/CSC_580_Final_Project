@@ -93,7 +93,7 @@ class TestBuildModels:
         device = torch.device("cpu")
         world_model, actor, critic = _build_models(config, device)
         assert hasattr(world_model, "rssm")
-        assert hasattr(actor, "policy")
+        assert hasattr(actor, "net")
         assert hasattr(critic, "value")
 
     def test_models_on_correct_device(self, config):

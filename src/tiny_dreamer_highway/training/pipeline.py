@@ -22,6 +22,10 @@ from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 from tiny_dreamer_highway.envs.highway_factory import make_highway_env
 from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Critic
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
+from tiny_dreamer_highway.training.sequence_world_model_step import (
+    stack_sequence_batch,
+    train_sequence_world_model_step,
+)
 from tiny_dreamer_highway.training.world_model_step import train_world_model_step
 from tiny_dreamer_highway.types import Transition
 from tiny_dreamer_highway.utils import stabilize_action_tensor
@@ -94,28 +98,32 @@ def collect_actor_transitions(
         env.action_space.seed(seed)
     observation, _ = env.reset(seed=seed)
     model_device = _module_device(world_model)
+    action_dim = world_model.rssm.action_dim
     prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
-    previous_action: Tensor | None = None
+    prev_action = torch.zeros(1, action_dim, device=model_device)
     added = 0
 
     try:
         for _ in range(steps):
             with torch.no_grad():
+                # 1. Encode current observation → posterior (uses previous action for GRU)
+                observation_tensor = _observation_to_tensor(
+                    np.asarray(observation, dtype=np.uint8)
+                ).to(model_device)
+                posterior = world_model(observation_tensor, prev_action, prev_state=prev_state)
+                prev_state = posterior.posterior_state
+
+                # 2. Select action based on the posterior that sees current obs
                 action_tensor = stabilize_action_tensor(
                     actor(prev_state.features),
-                    previous_action=previous_action,
+                    previous_action=prev_action,
                     longitudinal_scale=config.env.action.longitudinal_scale,
                     lateral_scale=config.env.action.lateral_scale,
                     smoothing_factor=config.env.action.smoothing_factor,
                     lateral_enabled=config.env.action.lateral,
                 )
+                prev_action = action_tensor
                 action = action_tensor.squeeze(0).float().cpu().numpy()
-                observation_tensor = _observation_to_tensor(
-                    np.asarray(observation, dtype=np.uint8)
-                ).to(model_device)
-                posterior = world_model(observation_tensor, action_tensor, prev_state=prev_state)
-                prev_state = posterior.posterior_state
-                previous_action = action_tensor
 
             next_observation, reward, terminated, truncated, _ = env.step(action)
             done = bool(terminated or truncated)
@@ -134,7 +142,7 @@ def collect_actor_transitions(
             if done:
                 observation, _ = env.reset()
                 prev_state = world_model.rssm.initial_state(batch_size=1, device=model_device)
-                previous_action = None
+                prev_action = torch.zeros(1, action_dim, device=model_device)
     finally:
         env.close()
 
@@ -168,7 +176,8 @@ def run_training_cycle(
         )
 
     batch_size = config.training.batch_size
-    if not replay_buffer.can_sample(batch_size=batch_size):
+    sequence_length = config.replay.sequence_length
+    if not replay_buffer.can_sample(batch_size=batch_size, sequence_length=sequence_length):
         raise ValueError("replay buffer does not contain enough samples for a training cycle")
 
     training_config: TrainingConfig = config.training
@@ -176,12 +185,15 @@ def run_training_cycle(
 
     world_model_metrics_list: list[dict[str, float]] = []
     for _ in range(training_config.world_model_updates_per_cycle):
-        batch = replay_buffer.sample_batch(batch_size=batch_size)
-        observations = torch.as_tensor(batch.observations, device=model_device)
-        actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
-        rewards = torch.as_tensor(batch.rewards, dtype=torch.float32, device=model_device)
+        sequences = replay_buffer.sample_sequences(
+            batch_size=batch_size, sequence_length=sequence_length,
+        )
+        seq_batch = stack_sequence_batch(sequences)
+        observations = torch.as_tensor(seq_batch.observations, device=model_device)
+        actions = torch.as_tensor(seq_batch.actions, dtype=torch.float32, device=model_device)
+        rewards = torch.as_tensor(seq_batch.rewards, dtype=torch.float32, device=model_device)
 
-        _, world_model_metrics = train_world_model_step(
+        _, world_model_metrics = train_sequence_world_model_step(
             world_model,
             world_model_optimizer,
             observations,

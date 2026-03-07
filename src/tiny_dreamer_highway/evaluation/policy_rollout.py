@@ -133,9 +133,10 @@ def run_policy_episode(
     """
     env = make_highway_env(config.env)
     device = next(world_model.parameters()).device
+    action_dim = world_model.rssm.action_dim
     observation, _ = env.reset(seed=seed)
     prev_state = world_model.rssm.initial_state(batch_size=1, device=device)
-    previous_action: Tensor | None = None
+    prev_action = torch.zeros(1, action_dim, device=device)
 
     frames: list[np.ndarray] = []
     rewards: list[float] = []
@@ -149,18 +150,21 @@ def run_policy_episode(
 
         for _ in range(max_steps):
             with torch.no_grad():
+                # 1. Encode current observation → posterior (uses previous action for GRU)
                 obs_tensor = _observation_to_tensor(observation, device)
+                output = world_model(obs_tensor, prev_action, prev_state=prev_state)
+                prev_state = output.posterior_state
+
+                # 2. Select action based on posterior that sees current obs
                 action_tensor = stabilize_action_tensor(
                     actor(prev_state.features),
-                    previous_action=previous_action,
+                    previous_action=prev_action,
                     longitudinal_scale=config.env.action.longitudinal_scale,
                     lateral_scale=config.env.action.lateral_scale,
                     smoothing_factor=config.env.action.smoothing_factor,
                     lateral_enabled=config.env.action.lateral,
                 )
-                output = world_model(obs_tensor, action_tensor, prev_state=prev_state)
-                prev_state = output.posterior_state
-                previous_action = action_tensor
+                prev_action = action_tensor
 
             action = action_tensor.squeeze(0).float().cpu().numpy()
             next_observation, reward, term, trunc, _ = env.step(action)

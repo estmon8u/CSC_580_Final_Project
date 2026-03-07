@@ -8,13 +8,18 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import numpy as np
 import torch
 from torch import Tensor, optim
 
 from tiny_dreamer_highway.models.encoder import LatentState
 from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOutput
-from tiny_dreamer_highway.training.world_model_step import compute_world_model_losses
+from tiny_dreamer_highway.training.world_model_step import (
+    _backward_and_step,
+    compute_world_model_losses,
+)
 from tiny_dreamer_highway.types import ReplaySequenceBatch, Transition
 
 
@@ -104,13 +109,20 @@ def train_sequence_world_model_step(
     kl_weight: float = 1.0,
     free_nats: float = 3.0,
     grad_clip_norm: float = 100.0,
+    grad_scaler: torch.amp.GradScaler | None = None,
+    amp_context: torch.amp.autocast | None = None,
 ) -> tuple[list[WorldModelOutput], dict[str, float]]:
     optimizer.zero_grad(set_to_none=True)
-    outputs, losses = compute_sequence_world_model_losses(
-        model, observations, actions, rewards,
-        kl_weight=kl_weight, free_nats=free_nats,
+
+    ctx = amp_context if amp_context is not None else nullcontext()
+    with ctx:
+        outputs, losses = compute_sequence_world_model_losses(
+            model, observations, actions, rewards,
+            kl_weight=kl_weight, free_nats=free_nats,
+        )
+
+    _backward_and_step(
+        losses["total_loss"], optimizer, model.parameters(),
+        grad_clip_norm, grad_scaler,
     )
-    losses["total_loss"].backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
-    optimizer.step()
     return outputs, {name: float(value.detach().cpu().item()) for name, value in losses.items()}
