@@ -9,6 +9,7 @@ AI tools consulted: GitHub Copilot
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 from time import perf_counter
 
 import torch
@@ -255,6 +256,8 @@ def run_training_experiment(
     save_every = config.training.checkpoint_interval if checkpoint_interval is None else checkpoint_interval
 
     artifact_directory = Path(artifact_root)
+    if resume_from is None and artifact_directory.exists():
+        shutil.rmtree(artifact_directory)
     checkpoint_dir = artifact_directory / "checkpoints"
     log_dir = artifact_directory / "logs"
 
@@ -281,13 +284,6 @@ def run_training_experiment(
             map_location=resolve_training_device(config.device),
         )
         start_step = int(metadata["step"]) + 1
-    else:
-        # Fresh run — clear stale log files so append-mode CSVs
-        # don't accumulate duplicate rows from previous runs.
-        for stale in ("cycle_metrics.csv", "cycle_metrics.jsonl", "latest_summary.json"):
-            stale_path = log_dir / stale
-            if stale_path.exists():
-                stale_path.unlink()
 
     # LR warm-up schedulers (None when warmup_steps == 0)
     wm_scheduler = _make_warmup_scheduler(world_model_optimizer, config.training.lr_warmup_steps)
