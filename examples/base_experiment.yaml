@@ -27,7 +27,7 @@ env:
     lane_change_reward: 0.0
     normalize_reward: true
     reward_speed_range: [20.0, 30.0]
-    offroad_terminal: false
+    offroad_terminal: true
     offroad_penalty: 3.0
     steering_penalty: 0.05
     steering_change_penalty: 0.1
