@@ -16,7 +16,6 @@ import torch
 from torch import Tensor, nn, optim
 
 from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
-from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
 @dataclass(slots=True)
@@ -86,17 +85,9 @@ def imagine_trajectory(
     reward_steps: list[Tensor] = []
     value_steps: list[Tensor] = []
     continue_steps: list[Tensor] = []
-    previous_action: Tensor | None = None
 
     for _ in range(horizon):
-        action = stabilize_action_tensor(
-            actor(state.features),
-            previous_action=previous_action,
-            longitudinal_scale=longitudinal_scale,
-            lateral_scale=lateral_scale,
-            smoothing_factor=smoothing_factor,
-            lateral_enabled=lateral_control,
-        )
+        action = actor(state.features)
         state = world_model.rssm.imagine_step(state, action)
         features = state.features
         reward = world_model.reward_predictor(features)
@@ -110,7 +101,6 @@ def imagine_trajectory(
         action_steps.append(action)
         reward_steps.append(reward)
         value_steps.append(value)
-        previous_action = action
 
     stacked_features = torch.stack(feature_steps, dim=0)
     stacked_actions = torch.stack(action_steps, dim=0)
@@ -164,6 +154,34 @@ def td_lambda_returns(
     return returns
 
 
+def trajectory_loss_weights(
+    rewards: Tensor,
+    *,
+    discount: float = 0.99,
+    discounts: Tensor | None = None,
+) -> Tensor:
+    if rewards.ndim < 2:
+        raise ValueError("rewards must include time and batch dimensions")
+    if discounts is not None and discounts.shape != rewards.shape:
+        raise ValueError("discounts must match rewards shape when provided")
+
+    if discounts is None:
+        step_discounts = torch.full_like(rewards, discount)
+    else:
+        step_discounts = discounts.to(dtype=rewards.dtype)
+
+    weights = torch.ones_like(rewards)
+    for step in range(1, rewards.shape[0]):
+        weights[step] = weights[step - 1] * step_discounts[step - 1]
+    return weights.detach()
+
+
+def weighted_mean(values: Tensor, weights: Tensor, eps: float = 1e-8) -> Tensor:
+    if values.shape != weights.shape:
+        raise ValueError("values and weights must have matching shapes")
+    return (values * weights).sum() / weights.sum().clamp_min(eps)
+
+
 def train_behavior_step(
     world_model: TinyWorldModel,
     actor: Actor,
@@ -184,12 +202,6 @@ def train_behavior_step(
     amp_context: torch.amp.autocast | None = None,
 ) -> dict[str, float]:
     _amp = amp_context if amp_context is not None else nullcontext()
-    _action_kw = dict(
-        longitudinal_scale=longitudinal_scale,
-        lateral_scale=lateral_scale,
-        smoothing_factor=smoothing_factor,
-        lateral_control=lateral_control,
-    )
 
     # --- Actor update: maximise imagined returns ---
     actor_optimizer.zero_grad(set_to_none=True)
@@ -197,7 +209,7 @@ def train_behavior_step(
 
     with _amp, frozen_params(world_model), frozen_params(critic):
         imagined = imagine_trajectory(
-            world_model, actor, critic, start_state, horizon, **_action_kw,
+            world_model, actor, critic, start_state, horizon,
         )
         imagined_discounts = (
             discount * imagined.continues.to(dtype=imagined.rewards.dtype)
@@ -211,7 +223,12 @@ def train_behavior_step(
             lambda_=lambda_,
             discounts=imagined_discounts,
         )
-        actor_loss = -actor_returns.mean()
+        actor_weights = trajectory_loss_weights(
+            imagined.rewards,
+            discount=discount,
+            discounts=imagined_discounts,
+        )
+        actor_loss = -weighted_mean(actor_returns, actor_weights)
 
     _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
 
@@ -221,7 +238,7 @@ def train_behavior_step(
 
     with _amp, frozen_params(world_model), frozen_params(actor):
         imagined = imagine_trajectory(
-            world_model, actor, critic, start_state, horizon, **_action_kw,
+            world_model, actor, critic, start_state, horizon,
         )
         imagined_discounts = (
             discount * imagined.continues.to(dtype=imagined.rewards.dtype)
@@ -236,7 +253,13 @@ def train_behavior_step(
             discounts=imagined_discounts,
         ).detach()
         critic_dist = critic.distribution(imagined.features)
-        critic_loss = -critic_dist.log_prob(critic_targets).mean()
+        critic_log_prob = critic_dist.log_prob(critic_targets)
+        critic_weights = trajectory_loss_weights(
+            imagined.rewards,
+            discount=discount,
+            discounts=imagined_discounts,
+        ).squeeze(-1)
+        critic_loss = -weighted_mean(critic_log_prob, critic_weights)
 
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 

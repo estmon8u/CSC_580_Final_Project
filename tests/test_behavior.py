@@ -2,6 +2,7 @@ import torch
 
 from tiny_dreamer_highway.models import Actor, Critic, TinyWorldModel
 from tiny_dreamer_highway.training import imagine_trajectory, td_lambda_returns, train_behavior_step
+from tiny_dreamer_highway.training.behavior_learning import trajectory_loss_weights, weighted_mean
 
 
 def test_actor_and_critic_return_expected_shapes() -> None:
@@ -66,6 +67,55 @@ def test_td_lambda_returns_uses_per_step_discounts_when_provided() -> None:
 
     expected = torch.tensor([[[11.0]], [[2.0]]])
     assert torch.allclose(returns, expected)
+
+
+def test_trajectory_loss_weights_follow_cumulative_discounts() -> None:
+    rewards = torch.zeros(3, 1, 1)
+    discounts = torch.tensor([[[0.5]], [[0.25]], [[0.1]]])
+
+    weights = trajectory_loss_weights(rewards, discounts=discounts)
+
+    expected = torch.tensor([[[1.0]], [[0.5]], [[0.125]]])
+    assert torch.allclose(weights, expected)
+
+
+def test_weighted_mean_uses_weight_sum_normalization() -> None:
+    values = torch.tensor([[1.0], [3.0], [10.0]])
+    weights = torch.tensor([[1.0], [1.0], [0.0]])
+
+    result = weighted_mean(values, weights)
+
+    assert torch.allclose(result, torch.tensor(2.0))
+
+
+def test_imagine_trajectory_does_not_apply_action_postprocessing(monkeypatch) -> None:
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
+    start_state = world_model.rssm.initial_state(batch_size=2)
+    raw_action = torch.tensor([[0.4, -0.6]], dtype=torch.float32)
+
+    monkeypatch.setattr(actor, "forward", lambda features: raw_action.expand(features.shape[0], -1))
+    monkeypatch.setattr(world_model.rssm, "imagine_step", lambda state, action: state)
+
+    trajectory = imagine_trajectory(
+        world_model,
+        actor,
+        critic,
+        start_state,
+        horizon=3,
+        longitudinal_scale=0.1,
+        lateral_scale=0.2,
+        smoothing_factor=0.9,
+        lateral_control=False,
+    )
+
+    expected = raw_action.expand(2, -1)
+    for step in range(trajectory.actions.shape[0]):
+        assert torch.allclose(trajectory.actions[step], expected)
 
 
 def test_train_behavior_step_updates_actor_and_critic_without_changing_world_model() -> None:
