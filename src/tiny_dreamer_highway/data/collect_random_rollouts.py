@@ -64,10 +64,10 @@ def collect_random_transitions(
             done = bool(terminated or truncated)
             replay_buffer.add(
                 Transition(
-                    observation=np.asarray(observation, dtype=np.uint8),
+                    observation=np.asarray(observation),
                     action=stored_action,
                     reward=float(reward),
-                    next_observation=np.asarray(next_observation, dtype=np.uint8),
+                    next_observation=np.asarray(next_observation),
                     done=done,
                     terminated=bool(terminated),
                     truncated=bool(truncated),

@@ -153,7 +153,7 @@ def collect_actor_transitions(
             with torch.inference_mode():
                 # 1. Encode current observation → posterior (uses previous action for GRU)
                 observation_tensor = _observation_to_tensor(
-                    np.asarray(observation, dtype=np.uint8)
+                    np.asarray(observation)
                 ).to(model_device)
                 posterior = world_model(observation_tensor, prev_action, prev_state=prev_state)
                 prev_state = posterior.posterior_state
@@ -182,10 +182,10 @@ def collect_actor_transitions(
             stored_action = action_tensor.squeeze(0).float().cpu().numpy()
             replay_buffer.add(
                 Transition(
-                    observation=np.asarray(observation, dtype=np.uint8),
+                    observation=np.asarray(observation),
                     action=stored_action,
                     reward=float(reward),
-                    next_observation=np.asarray(next_observation, dtype=np.uint8),
+                    next_observation=np.asarray(next_observation),
                     done=done,
                     terminated=bool(terminated),
                     truncated=bool(truncated),

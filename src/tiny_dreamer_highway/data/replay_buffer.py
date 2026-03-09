@@ -54,10 +54,10 @@ class ReplayBuffer:
         self.capacity = capacity
         self._size: int = 0
         self._position: int = 0
-        self._obs: NDArray[np.uint8] | None = None
+        self._obs: NDArray | None = None
         self._act: NDArray[np.float32] | None = None
         self._rew: NDArray[np.float32] | None = None
-        self._next_obs: NDArray[np.uint8] | None = None
+        self._next_obs: NDArray | None = None
         self._dones: NDArray[np.bool_] | None = None
         self._terminated: NDArray[np.bool_] | None = None
         self._truncated: NDArray[np.bool_] | None = None
@@ -78,13 +78,14 @@ class ReplayBuffer:
         self,
         obs_shape: tuple[int, ...],
         act_shape: tuple[int, ...],
+        obs_dtype: np.dtype = np.dtype(np.uint8),
     ) -> None:
         """Pre-allocate storage once the shapes are known."""
         cap = self.capacity
-        self._obs = np.empty((cap, *obs_shape), dtype=np.uint8)
+        self._obs = np.empty((cap, *obs_shape), dtype=obs_dtype)
         self._act = np.empty((cap, *act_shape), dtype=np.float32)
         self._rew = np.empty(cap, dtype=np.float32)
-        self._next_obs = np.empty((cap, *obs_shape), dtype=np.uint8)
+        self._next_obs = np.empty((cap, *obs_shape), dtype=obs_dtype)
         self._dones = np.empty(cap, dtype=np.bool_)
         self._terminated = np.empty(cap, dtype=np.bool_)
         self._truncated = np.empty(cap, dtype=np.bool_)
@@ -104,7 +105,11 @@ class ReplayBuffer:
 
     def add(self, transition: Transition) -> None:
         if self._obs is None:
-            self._allocate(transition.observation.shape, transition.action.shape)
+            self._allocate(
+                transition.observation.shape,
+                transition.action.shape,
+                obs_dtype=transition.observation.dtype,
+            )
 
         idx = self._position
         self._obs[idx] = transition.observation
@@ -128,13 +133,21 @@ class ReplayBuffer:
 
     @property
     def transitions(self) -> list[Transition]:
-        """Reconstruct ``list[Transition]`` in physical ring-buffer order.
+        """Reconstruct ``list[Transition]`` in chronological order.
+
+        After ring-buffer wrap-around the oldest entry sits at
+        ``_position``, so we return elements in logical (oldest-first)
+        order.
 
         Provided for backward compatibility with tests and serialisation.
         **Do not use on the training hot-path.**
         """
         if self._obs is None:
             return []
+        if self._size < self.capacity:
+            indices = range(self._size)
+        else:
+            indices = list(range(self._position, self.capacity)) + list(range(self._position))
         return [
             Transition(
                 observation=self._obs[i],
@@ -145,7 +158,7 @@ class ReplayBuffer:
                 terminated=bool(self._terminated[i]),
                 truncated=bool(self._truncated[i]),
             )
-            for i in range(self._size)
+            for i in indices
         ]
 
     # ------------------------------------------------------------------
@@ -377,7 +390,7 @@ class ReplayBuffer:
                 return
 
             obs = state["observations"]
-            self._allocate(obs.shape[1:], state["actions"].shape[1:])
+            self._allocate(obs.shape[1:], state["actions"].shape[1:], obs_dtype=obs.dtype)
             n = min(size, self.capacity)
             self._obs[:n] = state["observations"][:n]
             self._act[:n] = state["actions"][:n]
@@ -395,7 +408,11 @@ class ReplayBuffer:
                 return
 
             first = transitions[0]
-            self._allocate(first.observation.shape, first.action.shape)
+            self._allocate(
+                first.observation.shape,
+                first.action.shape,
+                obs_dtype=first.observation.dtype,
+            )
             n = min(len(transitions), self.capacity)
             for i in range(n):
                 t = transitions[i]
