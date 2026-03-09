@@ -43,6 +43,10 @@ class EnvConfig(BaseModel):
     observation_width: int = Field(default=64, ge=32, le=256)
     frame_stack: int = Field(default=1, ge=1, le=4)
     max_episode_steps: int = Field(default=40, ge=10, le=500)
+    lanes_count: int = Field(default=4, ge=2, le=8)
+    vehicles_count: int = Field(default=50, ge=0, le=200)
+    simulation_frequency: int = Field(default=15, ge=1, le=60)
+    policy_frequency: int = Field(default=5, ge=1, le=30)
     action: ActionConfig = Field(default_factory=ActionConfig)
     reward: RewardConfig = Field(default_factory=RewardConfig)
 

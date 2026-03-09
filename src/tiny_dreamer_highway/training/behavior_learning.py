@@ -16,6 +16,7 @@ import torch
 from torch import Tensor, nn, optim
 
 from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
+from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
 @dataclass(slots=True)
@@ -85,9 +86,19 @@ def imagine_trajectory(
     reward_steps: list[Tensor] = []
     value_steps: list[Tensor] = []
     continue_steps: list[Tensor] = []
+    previous_action: Tensor | None = None
 
     for _ in range(horizon):
-        action = actor(state.features)
+        raw_action = actor(state.features)
+        action = stabilize_action_tensor(
+            raw_action,
+            previous_action=previous_action,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_enabled=lateral_control,
+        )
+        previous_action = action
         state = world_model.rssm.imagine_step(state, action)
         features = state.features
         reward = world_model.reward_predictor(features)
@@ -210,6 +221,10 @@ def train_behavior_step(
     with _amp, frozen_params(world_model), frozen_params(critic):
         imagined = imagine_trajectory(
             world_model, actor, critic, start_state, horizon,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_control=lateral_control,
         )
         imagined_discounts = (
             discount * imagined.continues.to(dtype=imagined.rewards.dtype)
@@ -239,6 +254,10 @@ def train_behavior_step(
     with _amp, frozen_params(world_model), frozen_params(actor):
         imagined = imagine_trajectory(
             world_model, actor, critic, start_state, horizon,
+            longitudinal_scale=longitudinal_scale,
+            lateral_scale=lateral_scale,
+            smoothing_factor=smoothing_factor,
+            lateral_control=lateral_control,
         )
         imagined_discounts = (
             discount * imagined.continues.to(dtype=imagined.rewards.dtype)

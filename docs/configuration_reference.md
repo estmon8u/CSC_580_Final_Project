@@ -31,6 +31,10 @@ Example YAML files live in `examples/`.
 | `observation_width` | `64` | Width (in pixels). Kept equal to height for a square input that the CNN can process uniformly. Range: 32–256. |
 | `frame_stack` | `1` | Number of consecutive frames stacked into the observation's channel dimension. `1` = single frame (the RSSM handles temporal memory instead). Values >1 give the encoder explicit motion information. Range: 1–4. |
 | `max_episode_steps` | `40` | Hard limit on how many environment steps one episode can last. Prevents the agent from driving forever and caps per-episode data collection. Range: 10–500. |
+| `lanes_count` | `4` | Number of highway lanes. Fewer lanes (e.g., `3`) simplify the task and reduce off-road risk for early debugging. Range: 2–8. |
+| `vehicles_count` | `50` | Number of traffic vehicles in the scene. Fewer vehicles (e.g., `20`) make collisions less likely during exploration. Range: 0–200. |
+| `simulation_frequency` | `15` | Internal simulation frames per second inside Highway-Env. Higher = more physics fidelity but slower. Range: 1–60. |
+| `policy_frequency` | `5` | How often (per simulation second) an action decision is made. One policy step spans `simulation_frequency / policy_frequency` simulation frames. Lower values give the agent more thinking time per step. Range: 1–30. |
 
 ### `env.action` — Action Space
 
@@ -39,7 +43,7 @@ Example YAML files live in `examples/`.
 | `type` | `continuous` | Action space type. `continuous` means the actor outputs real-valued throttle/steering instead of discrete lane-change commands. |
 | `longitudinal` | `true` | Whether the agent controls acceleration/braking. If `false`, the car drives at a fixed speed. |
 | `lateral` | `true` | Whether the agent controls steering. If `false`, no lane changes. |
-| `longitudinal_scale` | `1.0` | Multiplier applied to the raw longitudinal action before sending it to the environment. `1.0` = full throttle range. Lower values (e.g., `0.5`) limit max acceleration, making driving smoother but slower. Range: (0, 1]. |
+| `longitudinal_scale` | `0.7` | Multiplier applied to the raw longitudinal action before sending it to the environment. `0.7` limits max acceleration to 70%, preventing excessive speed that causes off-road spinouts. Range: (0, 1]. |
 | `lateral_scale` | `0.35` | Multiplier on steering. `0.35` compresses the steering range to ~35% of maximum, preventing wild swerving. This is the single biggest stabilizer for smooth driving. Range: (0, 1]. |
 | `smoothing_factor` | `0.6` | Exponential moving average coefficient between consecutive actions: `a_t = α · a_{t-1} + (1 − α) · a_raw`. Higher = more inertia, smoother but less responsive. `0.0` = no smoothing. Range: [0, 1). |
 
@@ -49,7 +53,7 @@ Example YAML files live in `examples/`.
 |---|---|---|
 | `collision_reward` | `-1.0` | Reward given on crash (native Highway-Env setting). Negative = punishment. This is the primary safety signal. |
 | `right_lane_reward` | `0.1` | Bonus for being in the rightmost lane. Encourages orderly driving. |
-| `high_speed_reward` | `0.4` | Bonus for driving within the target speed range. The biggest positive reward — drives the agent to maintain speed. |
+| `high_speed_reward` | `0.2` | Bonus for driving within the target speed range. Reduced from `0.4` to `0.2` to avoid incentivising excessive speed that causes off-road crashes with continuous control. |
 | `lane_change_reward` | `0.0` | Reward/penalty for changing lanes. `0.0` = neutral. Set negative to discourage unnecessary weaving. |
 | `normalize_reward` | `true` | Whether Highway-Env normalizes reward to approximately [−1, 1]. Helps stabilize gradient magnitudes during training. |
 | `reward_speed_range` | `[20.0, 30.0]` | The speed window (m/s) over which `high_speed_reward` is linearly interpolated. Below 20 → 0 bonus, at 30 → full bonus. |
@@ -125,7 +129,7 @@ These are parsed into `ModelConfig` inside `ExperimentConfig`.
 | `rssm_min_std` | `0.1` | Minimum standard deviation added to RSSM prior/posterior distributions for numerical stability. |
 | `actor_hidden_dim` | `200` | Hidden layer width for the actor (policy) network. Range: 32–2048. |
 | `actor_num_layers` | `2` | Number of hidden layers in the actor MLP. Range: 1–4. |
-| `actor_init_std` | `5.0` | Initial exploration standard deviation used by the tanh-normal actor. |
+| `actor_init_std` | `1.0` | Initial exploration standard deviation for the tanh-normal actor. Reduced from 5.0 to prevent violent swerves in continuous highway control. |
 | `actor_mean_scale` | `5.0` | Scaling factor applied to the actor mean before the tanh transform. |
 | `actor_min_std` | `1e-4` | Minimum actor standard deviation to avoid collapsed exploration. |
 | `critic_hidden_dim` | `200` | Hidden layer width for the critic (value) network. Range: 32–2048. |

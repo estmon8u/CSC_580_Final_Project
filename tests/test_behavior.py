@@ -88,7 +88,7 @@ def test_weighted_mean_uses_weight_sum_normalization() -> None:
     assert torch.allclose(result, torch.tensor(2.0))
 
 
-def test_imagine_trajectory_does_not_apply_action_postprocessing(monkeypatch) -> None:
+def test_imagine_trajectory_applies_action_stabilization(monkeypatch) -> None:
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
         embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
@@ -107,15 +107,16 @@ def test_imagine_trajectory_does_not_apply_action_postprocessing(monkeypatch) ->
         critic,
         start_state,
         horizon=3,
-        longitudinal_scale=0.1,
-        lateral_scale=0.2,
-        smoothing_factor=0.9,
-        lateral_control=False,
+        longitudinal_scale=0.5,
+        lateral_scale=0.25,
+        smoothing_factor=0.0,
+        lateral_control=True,
     )
 
-    expected = raw_action.expand(2, -1)
+    # With stabilization: longitudinal 0.4*0.5=0.2, lateral -0.6*0.25=-0.15
+    expected = torch.tensor([[0.2, -0.15]], dtype=torch.float32).expand(2, -1)
     for step in range(trajectory.actions.shape[0]):
-        assert torch.allclose(trajectory.actions[step], expected)
+        assert torch.allclose(trajectory.actions[step], expected, atol=1e-5)
 
 
 def test_train_behavior_step_updates_actor_and_critic_without_changing_world_model() -> None:

@@ -40,6 +40,10 @@ def test_build_highway_env_kwargs_matches_expected_contract() -> None:
     assert kwargs["observation"]["type"] == "GrayscaleObservation"
     assert kwargs["observation"]["observation_shape"] == (64, 64)
     assert kwargs["action"]["type"] == "ContinuousAction"
+    assert kwargs["lanes_count"] == config.lanes_count
+    assert kwargs["vehicles_count"] == config.vehicles_count
+    assert kwargs["simulation_frequency"] == config.simulation_frequency
+    assert kwargs["policy_frequency"] == config.policy_frequency
     assert kwargs["duration"] == config.max_episode_steps
     assert kwargs["collision_reward"] == config.reward.collision_reward
     assert kwargs["offroad_terminal"] == config.reward.offroad_terminal
