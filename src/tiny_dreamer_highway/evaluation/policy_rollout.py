@@ -56,8 +56,17 @@ class DemoBundle:
 # ------------------------------------------------------------------
 
 def _observation_to_tensor(observation: np.ndarray, device: torch.device) -> Tensor:
-    """Convert a single numpy observation to a batched tensor on *device*."""
-    tensor = torch.as_tensor(np.asarray(observation, dtype=np.uint8), device=device)
+    """Convert a single numpy observation to a batched tensor on *device*.
+
+    Preserves the original dtype: uint8 pixels stay uint8, float
+    observations stay float32.  This avoids quantisation damage when
+    the environment emits normalised floats.
+    """
+    array = np.asarray(observation)
+    if np.issubdtype(array.dtype, np.floating):
+        tensor = torch.as_tensor(array, dtype=torch.float32, device=device)
+    else:
+        tensor = torch.as_tensor(array, dtype=torch.uint8, device=device)
     if tensor.ndim == 2:
         tensor = tensor.unsqueeze(0)
     if tensor.ndim == 3:
@@ -263,6 +272,8 @@ def save_rollout_gif(
     Path
         The resolved output path.
     """
+    if not frames:
+        raise ValueError("Cannot save GIF: frame list is empty (env.render() may have returned None)")
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     duration = 1.0 / max(fps, 1)
@@ -340,6 +351,14 @@ def record_demo_videos(
             seed=ep_seed,
         )
         results.append(result)
+
+        if not result.frames:
+            print(
+                f"[demo] episode {ep + 1}/{num_episodes} | "
+                "WARNING: no frames captured (env.render() returned None?) — skipping GIF",
+                flush=True,
+            )
+            continue
 
         gif_path = save_rollout_gif(
             result.frames,

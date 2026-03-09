@@ -18,6 +18,10 @@ def apply_kaiming_init(module: nn.Module) -> None:
     """
     for m in module.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-            nn.init.kaiming_uniform_(m.weight.data, nonlinearity="relu")
+            # Use nonlinearity="leaky_relu" which is the closest Kaiming
+            # mode to ELU (the dominant activation in our RSSM, actor, and
+            # critic networks).  The negative slope default (0.01) is a
+            # reasonable proxy for ELU's alpha=1.0.
+            nn.init.kaiming_uniform_(m.weight.data, nonlinearity="leaky_relu")
             if m.bias is not None:
                 nn.init.constant_(m.bias.data, 0)

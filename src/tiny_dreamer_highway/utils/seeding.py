@@ -29,5 +29,6 @@ def set_global_seeds(seed: int, deterministic_torch: bool = False) -> int:
     if deterministic_torch:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        torch.use_deterministic_algorithms(True)
 
     return seed

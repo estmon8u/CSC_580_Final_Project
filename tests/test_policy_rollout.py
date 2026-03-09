@@ -78,10 +78,16 @@ class TestObservationToTensor:
         assert tensor.ndim == 4
         assert tensor.shape == (1, 1, 64, 64)
 
-    def test_dtype_is_uint8(self):
+    def test_dtype_is_uint8_for_integer_input(self):
         obs = np.zeros((64, 64), dtype=np.uint8)
         tensor = _observation_to_tensor(obs, torch.device("cpu"))
         assert tensor.dtype == torch.uint8
+
+    def test_float_observation_preserved_as_float32(self):
+        obs = np.random.rand(1, 64, 64).astype(np.float32)
+        tensor = _observation_to_tensor(obs, torch.device("cpu"))
+        assert tensor.dtype == torch.float32
+        assert tensor.shape == (1, 1, 64, 64)
 
 
 # ---------------------------------------------------------------------------

@@ -107,9 +107,9 @@ def plot_training_history(
     eval_crash_rate = _float_series(history, "evaluation/crash_rate")
     replay_size = [int(row["replay_size"]) for row in history]
 
-    has_kl = "world_model/kl_loss" in history[0]
+    has_kl = any("world_model/kl_loss" in row for row in history)
     if has_kl:
-        world_kl = [float(row["world_model/kl_loss"]) for row in history]
+        world_kl = [float(row.get("world_model/kl_loss", float("nan"))) for row in history]
 
     figure, axes = plt.subplots(2, 2, figsize=(12, 8), tight_layout=True)
     figure.suptitle(title)

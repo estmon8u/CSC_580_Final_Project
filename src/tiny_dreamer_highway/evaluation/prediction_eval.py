@@ -15,6 +15,7 @@ from torch.distributions import Independent, Normal
 from torch import Tensor
 
 from tiny_dreamer_highway.models import TinyWorldModel
+from tiny_dreamer_highway.models.encoder import LatentState
 from tiny_dreamer_highway.training.world_model_step import gaussian_kl_divergence
 
 
@@ -75,7 +76,21 @@ def rollout_imagined_observations(
     model: TinyWorldModel,
     seed_observation: Tensor,
     future_actions: Tensor,
+    *,
+    prev_action: Tensor | None = None,
+    prev_state: LatentState | None = None,
 ) -> Tensor:
+    """Imagine future observations from a seed frame.
+
+    Parameters
+    ----------
+    prev_action:
+        The action that *produced* ``seed_observation``.  When ``None``
+        a zero vector is used (correct only at episode boundaries).
+    prev_state:
+        Latent state *before* ``seed_observation`` was observed.  When
+        ``None`` the RSSM initial state is used.
+    """
     if seed_observation.ndim != 4:
         raise ValueError("seed_observation must have shape (B, C, H, W)")
     if future_actions.ndim != 3:
@@ -85,12 +100,14 @@ def rollout_imagined_observations(
 
     batch_size = seed_observation.shape[0]
     device = seed_observation.device
-    zero_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+    if prev_action is None:
+        prev_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+    if prev_state is None:
+        prev_state = model.rssm.initial_state(batch_size=batch_size, device=device)
 
     with torch.no_grad():
-        initial_state = model.rssm.initial_state(batch_size=batch_size, device=device)
         embedding = model.encoder.encode(seed_observation)
-        state = model.rssm.observe_step(initial_state, zero_action, embedding)
+        state = model.rssm.observe_step(prev_state, prev_action, embedding)
 
         predictions: list[Tensor] = []
         for step in range(future_actions.shape[1]):
@@ -144,6 +161,9 @@ def evaluate_latent_rollout_consistency(
     seed_observation: Tensor,
     future_actions: Tensor,
     target_observations: Tensor,
+    *,
+    prev_action: Tensor | None = None,
+    prev_state: LatentState | None = None,
 ) -> dict[str, object]:
     if seed_observation.ndim != 4:
         raise ValueError("seed_observation must have shape (B, C, H, W)")
@@ -156,12 +176,15 @@ def evaluate_latent_rollout_consistency(
 
     batch_size = seed_observation.shape[0]
     device = seed_observation.device
-    zero_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+
+    if prev_action is None:
+        prev_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+    if prev_state is None:
+        prev_state = model.rssm.initial_state(batch_size=batch_size, device=device)
 
     with torch.no_grad():
-        initial_state = model.rssm.initial_state(batch_size=batch_size, device=device)
         embedding = model.encoder.encode(seed_observation)
-        grounded_state = model.rssm.observe_step(initial_state, zero_action, embedding)
+        grounded_state = model.rssm.observe_step(prev_state, prev_action, embedding)
         imagined_state = grounded_state
 
         step_metrics: list[dict[str, float]] = []

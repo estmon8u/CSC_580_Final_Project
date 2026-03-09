@@ -23,6 +23,8 @@ def stabilize_action_tensor(
     lateral_enabled: bool = True,
 ) -> Tensor:
     """Scale and smooth a continuous action tensor while preserving shape."""
+    if not 0.0 <= smoothing_factor <= 1.0:
+        raise ValueError("smoothing_factor must be in [0, 1]")
     processed = action.clone()
     processed[..., 0] = processed[..., 0] * longitudinal_scale
     if lateral_enabled and processed.shape[-1] >= 2:
@@ -42,6 +44,8 @@ def stabilize_action_array(
     lateral_enabled: bool = True,
 ) -> np.ndarray:
     """Scale and smooth a continuous action array while preserving shape."""
+    if not 0.0 <= smoothing_factor <= 1.0:
+        raise ValueError("smoothing_factor must be in [0, 1]")
     processed = np.array(action, dtype=np.float32, copy=True)
     processed[..., 0] *= longitudinal_scale
     if lateral_enabled and processed.shape[-1] >= 2:
