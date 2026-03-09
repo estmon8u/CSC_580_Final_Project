@@ -72,6 +72,13 @@ def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
     if config.action.is_discrete:
         action_block: dict[str, Any] = {
             "type": "DiscreteMetaAction",
+            "target_speeds": list(
+                np.linspace(
+                    config.reward.reward_speed_range[0],
+                    config.reward.reward_speed_range[1],
+                    num=config.action.num_actions,
+                )
+            ),
         }
     else:
         action_block = {

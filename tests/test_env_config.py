@@ -1,5 +1,6 @@
 import gymnasium as gym
 import numpy as np
+import pytest
 
 from tiny_dreamer_highway.config import EnvConfig
 from tiny_dreamer_highway.envs.highway_factory import (
@@ -59,6 +60,13 @@ def test_build_highway_env_kwargs_discrete_uses_discrete_meta_action() -> None:
     )
     kwargs = build_highway_env_kwargs(config)
     assert kwargs["action"]["type"] == "DiscreteMetaAction"
+    assert "target_speeds" in kwargs["action"]
+    assert len(kwargs["action"]["target_speeds"]) == 5
+
+
+def test_env_config_rejects_simulation_freq_below_policy_freq() -> None:
+    with pytest.raises(ValueError, match="simulation_frequency.*must be >= policy_frequency"):
+        EnvConfig(simulation_frequency=3, policy_frequency=10)
 
 
 def test_reward_wrapper_penalizes_unstable_steering_and_offroad() -> None:

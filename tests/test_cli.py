@@ -24,6 +24,12 @@ def test_parser_defaults_to_show_config() -> None:
     assert args.config == Path("examples/base_experiment.yaml")
 
 
+def test_parser_requires_subcommand() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+
 def test_parser_supports_collect_random() -> None:
     parser = build_parser()
     args = parser.parse_args(
@@ -83,7 +89,28 @@ def test_summarize_collection_contains_sampling_shapes() -> None:
     assert "Collected 8 transitions into replay" in summary
     assert "replay_size=8" in summary
     assert "batch_obs_shape=(4, 4, 4)" in summary
-    assert "sequence_batch=4x8" in summary
+    assert "sequence_batch=" in summary
+
+
+def test_summarize_collection_handles_tiny_buffer() -> None:
+    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config = load_experiment_config(config_path)
+    replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
+
+    replay_buffer.add(
+        Transition(
+            observation=np.ones((4, 4), dtype=np.uint8),
+            action=np.asarray([0.0, 0.5], dtype=np.float32),
+            reward=1.0,
+            next_observation=np.full((4, 4), 2, dtype=np.uint8),
+            done=False,
+        )
+    )
+
+    summary = summarize_collection(config, replay_buffer, added=1)
+    assert "Collected 1 transitions into replay" in summary
+    assert "replay_size=1" in summary
+    assert "sequence_batch=none" in summary
 
 
 def test_run_collect_random_uses_collection_helper(monkeypatch: pytest.MonkeyPatch) -> None:

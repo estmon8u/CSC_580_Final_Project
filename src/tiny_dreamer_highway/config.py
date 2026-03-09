@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ActionConfig(BaseModel):
@@ -54,6 +54,16 @@ class EnvConfig(BaseModel):
     policy_frequency: int = Field(default=5, ge=1, le=30)
     action: ActionConfig = Field(default_factory=ActionConfig)
     reward: RewardConfig = Field(default_factory=RewardConfig)
+
+    @model_validator(mode="after")
+    def _validate_frequency_relationship(self) -> "EnvConfig":
+        if self.simulation_frequency < self.policy_frequency:
+            raise ValueError(
+                f"simulation_frequency ({self.simulation_frequency}) must be >= "
+                f"policy_frequency ({self.policy_frequency}); the simulation "
+                "must tick at least as fast as the policy."
+            )
+        return self
 
 
 class ReplayConfig(BaseModel):

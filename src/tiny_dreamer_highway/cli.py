@@ -28,17 +28,25 @@ def summarize_config(config: ExperimentConfig) -> str:
 
 
 def summarize_collection(config: ExperimentConfig, replay_buffer: ReplayBuffer, added: int) -> str:
-    batch = replay_buffer.sample_batch(batch_size=config.replay.batch_size)
-    sequences = replay_buffer.sample_sequences(
+    safe_batch_size = min(config.replay.batch_size, len(replay_buffer))
+    batch = replay_buffer.sample_batch(batch_size=safe_batch_size)
+    sequence_text = "none"
+    if replay_buffer.can_sample(
         batch_size=config.replay.batch_size,
         sequence_length=config.replay.sequence_length,
-    )
+    ):
+        sequences = replay_buffer.sample_sequences(
+            batch_size=min(config.replay.batch_size, len(replay_buffer)),
+            sequence_length=config.replay.sequence_length,
+        )
+        if sequences:
+            sequence_text = f"{len(sequences)}x{len(sequences[0])}"
     return (
         f"Collected {added} transitions into replay | "
         f"replay_size={len(replay_buffer)} | "
         f"batch_obs_shape={tuple(batch.observations.shape)} | "
         f"batch_action_shape={tuple(batch.actions.shape)} | "
-        f"sequence_batch={len(sequences)}x{len(sequences[0])}"
+        f"sequence_batch={sequence_text}"
     )
 
 
@@ -92,7 +100,7 @@ def run_train_baseline(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Tiny Dreamer Highway CLI")
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     show_config = subparsers.add_parser(
         "show-config",
@@ -169,17 +177,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional checkpoint path to resume from.",
     )
 
-    parser.set_defaults(command="show-config")
     return parser
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "collect-random":
+    if args.command == "show-config":
+        print(run_show_config(args.config))
+    elif args.command == "collect-random":
         print(run_collect_random(args.config, steps=args.steps))
-        return
-    if args.command == "train-baseline":
+    elif args.command == "train-baseline":
         print(
             run_train_baseline(
                 args.config,
@@ -191,9 +199,6 @@ def main() -> None:
                 resume_from=args.resume_from,
             )
         )
-        return
-
-    print(run_show_config(args.config))
 
 
 if __name__ == "__main__":
