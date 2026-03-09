@@ -128,6 +128,10 @@ class TestSaveRolloutGif:
         output = save_rollout_gif(frames, deep_path)
         assert output.exists()
 
+    def test_raises_on_empty_frames(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="frame list is empty"):
+            save_rollout_gif([], tmp_path / "empty.gif")
+
 
 # ---------------------------------------------------------------------------
 # Integration tests: run_policy_episode
@@ -255,3 +259,46 @@ class TestDataclasses:
             results=[],
         )
         assert len(bundle.video_paths) == 2
+
+
+# ---------------------------------------------------------------------------
+# Empty-frame edge case
+# ---------------------------------------------------------------------------
+
+class TestRecordDemoVideosEmptyFrames:
+    """Verify that record_demo_videos gracefully handles episodes where
+    env.render() returns None (no frames captured)."""
+
+    def test_skips_gif_for_frameless_episode(self, config, dummy_checkpoint, tmp_path: Path):
+        """Monkeypatch run_policy_episode to return no frames and verify
+        record_demo_videos does not crash and produces no GIF for that episode."""
+        empty_result = RolloutResult(
+            frames=[],
+            rewards=[1.0],
+            total_reward=1.0,
+            steps=1,
+            terminated=False,
+        )
+
+        with patch(
+            "tiny_dreamer_highway.evaluation.policy_rollout.run_policy_episode",
+            return_value=empty_result,
+        ), patch(
+            "tiny_dreamer_highway.evaluation.policy_rollout._load_models_from_checkpoint",
+            return_value=(MagicMock(), MagicMock()),
+        ):
+            bundle = record_demo_videos(
+                config,
+                checkpoint_path=dummy_checkpoint,
+                output_dir=tmp_path / "demos",
+                num_episodes=2,
+                max_steps=5,
+                seed=42,
+                device="cpu",
+                show_progress=False,
+            )
+
+        # No GIFs should have been written (all episodes had empty frames)
+        assert len(bundle.video_paths) == 0
+        # But results should still be recorded for both episodes
+        assert len(bundle.results) == 2

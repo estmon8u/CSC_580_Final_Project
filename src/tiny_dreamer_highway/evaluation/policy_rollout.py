@@ -340,6 +340,7 @@ def record_demo_videos(
 
     video_paths: list[Path] = []
     results: list[RolloutResult] = []
+    gif_path_by_episode: dict[int, Path] = {}
 
     for ep in range(num_episodes):
         ep_seed = (seed + ep) if seed is not None else None
@@ -366,6 +367,7 @@ def record_demo_videos(
             fps=fps,
         )
         video_paths.append(gif_path)
+        gif_path_by_episode[ep] = gif_path
 
         if show_progress:
             tag = "CRASH" if result.terminated else "OK"
@@ -388,7 +390,7 @@ def record_demo_videos(
                 "steps": r.steps,
                 "total_reward": r.total_reward,
                 "terminated": r.terminated,
-                "gif": str(video_paths[i].name),
+                "gif": str(gif_path_by_episode[i].name) if i in gif_path_by_episode else None,
             }
             for i, r in enumerate(results)
         ],

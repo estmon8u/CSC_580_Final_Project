@@ -17,7 +17,7 @@ from tiny_dreamer_highway.training.experiment import TrainingRunSummary
 from tiny_dreamer_highway.types import Transition
 
 
-def test_parser_defaults_to_show_config() -> None:
+def test_parser_accepts_show_config_subcommand() -> None:
     parser = build_parser()
     args = parser.parse_args(["show-config", "--config", "examples/base_experiment.yaml"])
     assert args.command == "show-config"

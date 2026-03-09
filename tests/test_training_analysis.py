@@ -79,3 +79,50 @@ def test_load_cycle_metrics_history_ignores_overflow_columns_from_old_csv_header
         {"step": 1, "world_model/total_loss": 0.5},
         {"step": 2, "world_model/total_loss": 0.25},
     ]
+
+
+def test_plot_training_history_handles_kl_appearing_in_later_rows(tmp_path: Path) -> None:
+    """Verify that plot_training_history correctly detects and plots a KL
+    column that only appears in rows after the first one.  This tests the
+    `has_kl = any(...)` fix (not just checking `history[0]`)."""
+    csv_path = tmp_path / "cycle_metrics.csv"
+    csv_path.write_text(
+        "step,warm_start_added,policy_added,replay_size,"
+        "world_model/reconstruction_loss,world_model/reconstruction_mse,"
+        "world_model/reward_loss,world_model/continue_loss,"
+        "world_model/total_loss,"
+        "behavior/actor_loss,behavior/critic_loss,"
+        "behavior/imagined_reward_mean,behavior/imagined_value_mean\n"
+        "1,64,8,72,0.20,0.010,0.10,0.08,0.30,-0.05,0.20,0.01,0.05\n"
+        "2,0,8,80,0.15,0.008,0.08,0.06,0.23,-0.10,0.18,0.03,0.07\n",
+        encoding="utf-8",
+    )
+    # Now add a row that *does* include world_model/kl_loss.
+    # DictReader only uses the header for field names, so we need to
+    # re-write the entire CSV with the wider header.
+    csv_path.write_text(
+        "step,warm_start_added,policy_added,replay_size,"
+        "world_model/reconstruction_loss,world_model/reconstruction_mse,"
+        "world_model/reward_loss,world_model/continue_loss,"
+        "world_model/kl_loss,"
+        "world_model/total_loss,"
+        "behavior/actor_loss,behavior/critic_loss,"
+        "behavior/imagined_reward_mean,behavior/imagined_value_mean\n"
+        "1,64,8,72,0.20,0.010,0.10,0.08,,0.30,-0.05,0.20,0.01,0.05\n"
+        "2,0,8,80,0.15,0.008,0.08,0.06,2.5,0.23,-0.10,0.18,0.03,0.07\n"
+        "3,0,8,88,0.12,0.006,0.05,0.04,1.8,0.17,-0.12,0.15,0.04,0.09\n",
+        encoding="utf-8",
+    )
+
+    history = load_cycle_metrics_history(csv_path)
+
+    # Row 1 should NOT have kl_loss (it was empty → parsed as None → skipped)
+    assert "world_model/kl_loss" not in history[0]
+    # Rows 2 and 3 should have it
+    assert history[1]["world_model/kl_loss"] == 2.5
+    assert history[2]["world_model/kl_loss"] == 1.8
+
+    # The key test: plotting should succeed even though row 0 lacks the KL column
+    plot_path = plot_training_history(history, tmp_path / "kl_curves.png")
+    assert plot_path.exists()
+    assert plot_path.suffix == ".png"

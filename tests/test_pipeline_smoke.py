@@ -253,6 +253,138 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
     assert metrics.behavior_metrics["critic_loss"] == 0.2
 
 
+def test_world_model_training_consumes_next_observations_not_observations(monkeypatch) -> None:
+    """Prove that the pipeline passes *next_observations* (post-action) to the
+    world-model sequence training step, not the pre-action observations.
+
+    This is the key replay-alignment invariant: the RSSM advances the
+    deterministic state with `action_t` *before* conditioning on the
+    observation embedding, so the observation paired with `action_t` must
+    be `next_obs_t` (the observation that results from taking `action_t`).
+
+    We stamp `observations` and `next_observations` with distinguishable
+    pixel values so the test can tell which array was actually consumed.
+    """
+    config = ExperimentConfig.model_validate(
+        {
+            "training": {
+                "batch_size": 2,
+                "imagination_horizon": 5,
+                "world_model_updates_per_cycle": 1,
+                "behavior_updates_per_cycle": 1,
+            },
+            "replay": {"sequence_length": 4},
+        }
+    )
+    replay_buffer = ReplayBuffer(capacity=128)
+    OBS_VALUE = 10   # distinguishable pre-action pixel value
+    NEXT_VALUE = 200 # distinguishable post-action pixel value
+
+    for idx in range(16):
+        replay_buffer.add(
+            Transition(
+                observation=np.full((1, 64, 64), OBS_VALUE, dtype=np.uint8),
+                action=np.asarray([idx / 10.0, idx / 20.0], dtype=np.float32),
+                reward=float(idx) / 10.0,
+                next_observation=np.full((1, 64, 64), NEXT_VALUE, dtype=np.uint8),
+                done=False,
+                terminated=False,
+                truncated=False,
+            )
+        )
+
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
+    world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
+
+    captured = {}
+
+    def spy_train_sequence_world_model_step(
+        model, optimizer, observations, actions, rewards, **kwargs
+    ):
+        captured["observations"] = observations.clone()
+        captured["actions"] = actions.clone()
+        captured["rewards"] = rewards.clone()
+        # Return a plausible no-op result so the pipeline proceeds
+        return [], {
+            "reconstruction_loss": 1.0,
+            "reconstruction_mse": 0.1,
+            "observation_log_prob": -1.0,
+            "reward_loss": 0.5,
+            "continue_loss": 0.1,
+            "kl_loss": 3.0,
+            "kl_loss_raw": 2.0,
+            "overshooting_kl_loss": 0.3,
+            "overshooting_feature_mse": 0.2,
+            "overshooting_pairs": 6.0,
+            "total_loss": 4.5,
+        }
+
+    def fake_seed_latent_state(*args, **kwargs):
+        return world_model.rssm.initial_state(batch_size=2)
+
+    def fake_train_behavior_step(*args, **kwargs):
+        return {
+            "actor_loss": -0.1,
+            "critic_loss": 0.2,
+            "imagined_reward_mean": 0.3,
+            "imagined_value_mean": 0.4,
+        }
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.train_sequence_world_model_step",
+        spy_train_sequence_world_model_step,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.seed_latent_state",
+        fake_seed_latent_state,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.train_behavior_step",
+        fake_train_behavior_step,
+    )
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.collect_actor_transitions",
+        lambda *args, **kwargs: 0,
+    )
+
+    run_training_cycle(
+        config,
+        replay_buffer,
+        world_model,
+        actor,
+        critic,
+        world_optimizer,
+        actor_optimizer,
+        critic_optimizer,
+        warm_start_steps=0,
+        policy_steps=0,
+        seed=7,
+    )
+
+    # The critical assertion: every pixel in `captured["observations"]`
+    # must be NEXT_VALUE (200), not OBS_VALUE (10).
+    obs_tensor = captured["observations"]
+    assert obs_tensor.shape[0] == 2  # batch
+    assert obs_tensor.shape[1] == 4  # sequence_length
+    # Convert to uint8 for pixel comparison (observations are loaded as uint8)
+    unique_values = obs_tensor.unique().tolist()
+    assert NEXT_VALUE in unique_values, (
+        f"Expected next_observations pixel value {NEXT_VALUE} in world-model "
+        f"training input, but got unique values {unique_values}"
+    )
+    assert OBS_VALUE not in unique_values, (
+        f"Pipeline incorrectly passed pre-action observations (pixel value "
+        f"{OBS_VALUE}) to world-model training instead of next_observations"
+    )
+
+
 def test_run_training_cycle_auto_tops_up_random_data_until_sequences_exist(monkeypatch) -> None:
     config = ExperimentConfig.model_validate(
         {
