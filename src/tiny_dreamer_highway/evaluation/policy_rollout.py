@@ -23,7 +23,7 @@ from torch import Tensor
 
 from tiny_dreamer_highway.config import ExperimentConfig, load_experiment_config
 from tiny_dreamer_highway.envs.highway_factory import make_highway_env
-from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
+from tiny_dreamer_highway.models import Actor, Critic, DiscreteActor, LatentState, TinyWorldModel
 from tiny_dreamer_highway.training.checkpointing import find_latest_checkpoint
 from tiny_dreamer_highway.training.experiment import (
     infer_env_shapes,
@@ -68,7 +68,7 @@ def _observation_to_tensor(observation: np.ndarray, device: torch.device) -> Ten
 def _build_models(
     config: ExperimentConfig,
     device: torch.device,
-) -> tuple[TinyWorldModel, Actor, Critic]:
+) -> tuple[TinyWorldModel, Actor | DiscreteActor, Critic]:
     """Instantiate world-model, actor, and critic on *device* (weights uninitialized)."""
     observation_shape, action_dim = infer_env_shapes(config)
     mc = config.model
@@ -90,15 +90,23 @@ def _build_models(
         continue_num_layers=mc.continue_num_layers,
     ).to(device)
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
-    actor = Actor(
-        latent_dim=latent_dim,
-        action_dim=action_dim,
-        hidden_dim=mc.actor_hidden_dim,
-        num_layers=mc.actor_num_layers,
-        init_std=mc.actor_init_std,
-        mean_scale=mc.actor_mean_scale,
-        min_std=mc.actor_min_std,
-    ).to(device)
+    if config.env.action.is_discrete:
+        actor: Actor | DiscreteActor = DiscreteActor(
+            latent_dim=latent_dim,
+            num_actions=action_dim,
+            hidden_dim=mc.actor_hidden_dim,
+            num_layers=mc.actor_num_layers,
+        ).to(device)
+    else:
+        actor = Actor(
+            latent_dim=latent_dim,
+            action_dim=action_dim,
+            hidden_dim=mc.actor_hidden_dim,
+            num_layers=mc.actor_num_layers,
+            init_std=mc.actor_init_std,
+            mean_scale=mc.actor_mean_scale,
+            min_std=mc.actor_min_std,
+        ).to(device)
     critic = Critic(
         latent_dim=latent_dim,
         hidden_dim=mc.critic_hidden_dim,
@@ -112,7 +120,7 @@ def _load_models_from_checkpoint(
     checkpoint_path: str | Path,
     config: ExperimentConfig,
     device: torch.device,
-) -> tuple[TinyWorldModel, Actor]:
+) -> tuple[TinyWorldModel, Actor | DiscreteActor]:
     """Load world-model and actor weights from a saved checkpoint."""
     world_model, actor, _critic = _build_models(config, device)
     checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=False)
@@ -130,7 +138,7 @@ def _load_models_from_checkpoint(
 def run_policy_episode(
     config: ExperimentConfig,
     world_model: TinyWorldModel,
-    actor: Actor,
+    actor: Actor | DiscreteActor,
     *,
     max_steps: int = 200,
     seed: int | None = None,
@@ -162,6 +170,7 @@ def run_policy_episode(
         whether the episode ended via termination (crash) or
         truncation (time limit).
     """
+    is_discrete = config.env.action.is_discrete
     env = make_highway_env(config.env)
     device = next(world_model.parameters()).device
     action_dim = world_model.rssm.action_dim
@@ -188,17 +197,22 @@ def run_policy_episode(
                 prev_state = output.posterior_state
 
                 # 2. Select action based on posterior that sees current obs
-                action_tensor = stabilize_action_tensor(
-                    actor(prev_state.features),
-                    previous_action=prev_action,
-                    longitudinal_scale=config.env.action.longitudinal_scale,
-                    lateral_scale=config.env.action.lateral_scale,
-                    smoothing_factor=config.env.action.smoothing_factor,
-                    lateral_enabled=config.env.action.lateral,
-                )
+                raw_action_tensor = actor(prev_state.features)
+                if is_discrete:
+                    action_tensor = raw_action_tensor
+                    action = int(raw_action_tensor.squeeze(0).argmax(dim=-1).item())
+                else:
+                    action_tensor = stabilize_action_tensor(
+                        raw_action_tensor,
+                        previous_action=prev_action,
+                        longitudinal_scale=config.env.action.longitudinal_scale,
+                        lateral_scale=config.env.action.lateral_scale,
+                        smoothing_factor=config.env.action.smoothing_factor,
+                        lateral_enabled=config.env.action.lateral,
+                    )
+                    action = action_tensor.squeeze(0).float().cpu().numpy()
                 prev_action = action_tensor
 
-            action = action_tensor.squeeze(0).float().cpu().numpy()
             next_observation, reward, term, trunc, _ = env.step(action)
             rewards.append(float(reward))
 

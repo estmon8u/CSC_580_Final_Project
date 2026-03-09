@@ -16,6 +16,7 @@ import torch
 from torch import Tensor, nn, optim
 
 from tiny_dreamer_highway.models import Actor, Critic, LatentState, TinyWorldModel
+from tiny_dreamer_highway.models.discrete_actor import DiscreteActor
 from tiny_dreamer_highway.utils import stabilize_action_tensor
 
 
@@ -64,7 +65,7 @@ def frozen_params(module: nn.Module) -> Iterator[None]:
 
 def imagine_trajectory(
     world_model: TinyWorldModel,
-    actor: Actor,
+    actor: Actor | DiscreteActor,
     critic: Critic,
     start_state: LatentState,
     horizon: int,
@@ -79,6 +80,7 @@ def imagine_trajectory(
     if start_state.deterministic is None or start_state.stochastic is None:
         raise ValueError("start_state must contain deterministic and stochastic tensors")
 
+    is_discrete = isinstance(actor, DiscreteActor)
     state = start_state
     states: list[LatentState] = []
     feature_steps: list[Tensor] = []
@@ -90,14 +92,18 @@ def imagine_trajectory(
 
     for _ in range(horizon):
         raw_action = actor(state.features)
-        action = stabilize_action_tensor(
-            raw_action,
-            previous_action=previous_action,
-            longitudinal_scale=longitudinal_scale,
-            lateral_scale=lateral_scale,
-            smoothing_factor=smoothing_factor,
-            lateral_enabled=lateral_control,
-        )
+        if is_discrete:
+            # DiscreteActor returns one-hot; no stabilization needed
+            action = raw_action
+        else:
+            action = stabilize_action_tensor(
+                raw_action,
+                previous_action=previous_action,
+                longitudinal_scale=longitudinal_scale,
+                lateral_scale=lateral_scale,
+                smoothing_factor=smoothing_factor,
+                lateral_enabled=lateral_control,
+            )
         previous_action = action
         state = world_model.rssm.imagine_step(state, action)
         features = state.features
@@ -195,7 +201,7 @@ def weighted_mean(values: Tensor, weights: Tensor, eps: float = 1e-8) -> Tensor:
 
 def train_behavior_step(
     world_model: TinyWorldModel,
-    actor: Actor,
+    actor: Actor | DiscreteActor,
     critic: Critic,
     actor_optimizer: optim.Optimizer,
     critic_optimizer: optim.Optimizer,

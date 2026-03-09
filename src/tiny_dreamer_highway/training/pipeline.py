@@ -21,6 +21,7 @@ from tiny_dreamer_highway.data.collect_random_rollouts import collect_random_tra
 from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 from tiny_dreamer_highway.envs.highway_factory import make_highway_env
 from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Critic
+from tiny_dreamer_highway.models.discrete_actor import DiscreteActor
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
 from tiny_dreamer_highway.training.sequence_world_model_step import (
     stack_sequence_batch,
@@ -130,13 +131,14 @@ def collect_actor_transitions(
     config: ExperimentConfig,
     replay_buffer: ReplayBuffer,
     world_model: TinyWorldModel,
-    actor: Actor,
+    actor: Actor | DiscreteActor,
     steps: int,
     seed: int | None = None,
 ) -> int:
     if steps <= 0:
         return 0
 
+    is_discrete = config.env.action.is_discrete
     env = make_highway_env(config.env)
     if seed is not None and hasattr(env.action_space, "seed"):
         env.action_space.seed(seed)
@@ -158,23 +160,31 @@ def collect_actor_transitions(
                 prev_state = posterior.posterior_state
 
                 # 2. Select action based on the posterior that sees current obs
-                action_tensor = stabilize_action_tensor(
-                    actor(prev_state.features),
-                    previous_action=prev_action,
-                    longitudinal_scale=config.env.action.longitudinal_scale,
-                    lateral_scale=config.env.action.lateral_scale,
-                    smoothing_factor=config.env.action.smoothing_factor,
-                    lateral_enabled=config.env.action.lateral,
-                )
+                raw_action_tensor = actor(prev_state.features)
+                if is_discrete:
+                    # One-hot for RSSM tracking; integer for env.step
+                    action_tensor = raw_action_tensor
+                    env_action = int(raw_action_tensor.squeeze(0).argmax(dim=-1).item())
+                else:
+                    action_tensor = stabilize_action_tensor(
+                        raw_action_tensor,
+                        previous_action=prev_action,
+                        longitudinal_scale=config.env.action.longitudinal_scale,
+                        lateral_scale=config.env.action.lateral_scale,
+                        smoothing_factor=config.env.action.smoothing_factor,
+                        lateral_enabled=config.env.action.lateral,
+                    )
+                    env_action = action_tensor.squeeze(0).float().cpu().numpy()
                 prev_action = action_tensor
-                action = action_tensor.squeeze(0).float().cpu().numpy()
 
-            next_observation, reward, terminated, truncated, _ = env.step(action)
+            next_observation, reward, terminated, truncated, _ = env.step(env_action)
             done = bool(terminated or truncated)
+            # Store one-hot for discrete, raw for continuous
+            stored_action = action_tensor.squeeze(0).float().cpu().numpy()
             replay_buffer.add(
                 Transition(
                     observation=np.asarray(observation, dtype=np.uint8),
-                    action=action,
+                    action=stored_action,
                     reward=float(reward),
                     next_observation=np.asarray(next_observation, dtype=np.uint8),
                     done=done,

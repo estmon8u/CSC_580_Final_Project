@@ -49,6 +49,18 @@ def test_build_highway_env_kwargs_matches_expected_contract() -> None:
     assert kwargs["offroad_terminal"] == config.reward.offroad_terminal
 
 
+def test_build_highway_env_kwargs_discrete_uses_discrete_meta_action() -> None:
+    from tiny_dreamer_highway.config import ActionConfig
+    config = EnvConfig(
+        observation_height=64,
+        observation_width=64,
+        frame_stack=1,
+        action=ActionConfig(type="discrete", num_actions=5),
+    )
+    kwargs = build_highway_env_kwargs(config)
+    assert kwargs["action"]["type"] == "DiscreteMetaAction"
+
+
 def test_reward_wrapper_penalizes_unstable_steering_and_offroad() -> None:
     config = EnvConfig(
         reward={

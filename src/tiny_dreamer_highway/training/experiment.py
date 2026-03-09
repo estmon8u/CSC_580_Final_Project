@@ -17,7 +17,7 @@ import torch
 from tiny_dreamer_highway.config import ExperimentConfig
 from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 from tiny_dreamer_highway.envs.highway_factory import make_highway_env
-from tiny_dreamer_highway.models import Actor, Critic, TinyWorldModel
+from tiny_dreamer_highway.models import Actor, Critic, DiscreteActor, TinyWorldModel
 from tiny_dreamer_highway.training.checkpointing import load_checkpoint, save_checkpoint
 from tiny_dreamer_highway.training.metrics_logging import export_cycle_metrics, flatten_cycle_metrics
 from tiny_dreamer_highway.training.pipeline import PipelineCycleMetrics, resolve_amp_dtype, run_training_cycle
@@ -38,7 +38,7 @@ class TrainingRunSummary:
 def evaluate_training_policy(
     config: ExperimentConfig,
     world_model: TinyWorldModel,
-    actor: Actor,
+    actor: Actor | DiscreteActor,
     *,
     episodes: int,
     max_steps: int,
@@ -93,12 +93,17 @@ def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], in
     env = make_highway_env(config.env)
     try:
         observation, _ = env.reset(seed=config.seed)
-        action = env.action_space.sample()
+        if config.env.action.is_discrete:
+            import gymnasium as gym
+            assert isinstance(env.action_space, gym.spaces.Discrete)
+            action_dim = int(env.action_space.n)
+        else:
+            action = env.action_space.sample()
+            action_dim = int(action.shape[0])
     finally:
         env.close()
 
     observation_shape = tuple(int(dim) for dim in observation.shape)
-    action_dim = int(action.shape[0])
     return observation_shape, action_dim
 
 
@@ -158,7 +163,7 @@ def initialize_training_state(
 ) -> tuple[
     ReplayBuffer,
     TinyWorldModel,
-    Actor,
+    Actor | DiscreteActor,
     Critic,
     torch.optim.Optimizer,
     torch.optim.Optimizer,
@@ -188,15 +193,23 @@ def initialize_training_state(
         continue_num_layers=mc.continue_num_layers,
     ).to(device)
     latent_dim = world_model.rssm.deterministic_dim + world_model.rssm.stochastic_dim
-    actor = Actor(
-        latent_dim=latent_dim,
-        action_dim=action_dim,
-        hidden_dim=mc.actor_hidden_dim,
-        num_layers=mc.actor_num_layers,
-        init_std=mc.actor_init_std,
-        mean_scale=mc.actor_mean_scale,
-        min_std=mc.actor_min_std,
-    ).to(device)
+    if config.env.action.is_discrete:
+        actor: Actor | DiscreteActor = DiscreteActor(
+            latent_dim=latent_dim,
+            num_actions=action_dim,
+            hidden_dim=mc.actor_hidden_dim,
+            num_layers=mc.actor_num_layers,
+        ).to(device)
+    else:
+        actor = Actor(
+            latent_dim=latent_dim,
+            action_dim=action_dim,
+            hidden_dim=mc.actor_hidden_dim,
+            num_layers=mc.actor_num_layers,
+            init_std=mc.actor_init_std,
+            mean_scale=mc.actor_mean_scale,
+            min_std=mc.actor_min_std,
+        ).to(device)
     critic = Critic(
         latent_dim=latent_dim,
         hidden_dim=mc.critic_hidden_dim,

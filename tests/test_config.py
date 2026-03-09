@@ -16,3 +16,12 @@ def test_load_experiment_config_reads_example() -> None:
     assert config.model.reward_distribution_std == 1.0
     assert config.model.critic_distribution_std == 1.0
     assert config.model.observation_distribution_std == 1.0
+
+
+def test_load_discrete_experiment_config() -> None:
+    config_path = Path(__file__).resolve().parents[1] / "examples" / "discrete_experiment.yaml"
+    config = load_experiment_config(config_path)
+    assert isinstance(config, ExperimentConfig)
+    assert config.env.action.type == "discrete"
+    assert config.env.action.is_discrete
+    assert config.env.action.num_actions == 5

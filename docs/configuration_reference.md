@@ -40,12 +40,13 @@ Example YAML files live in `examples/`.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `type` | `continuous` | Action space type. `continuous` means the actor outputs real-valued throttle/steering instead of discrete lane-change commands. |
-| `longitudinal` | `true` | Whether the agent controls acceleration/braking. If `false`, the car drives at a fixed speed. |
-| `lateral` | `true` | Whether the agent controls steering. If `false`, no lane changes. |
-| `longitudinal_scale` | `0.7` | Multiplier applied to the raw longitudinal action before sending it to the environment. `0.7` limits max acceleration to 70%, preventing excessive speed that causes off-road spinouts. Range: (0, 1]. |
-| `lateral_scale` | `0.35` | Multiplier on steering. `0.35` compresses the steering range to ~35% of maximum, preventing wild swerving. This is the single biggest stabilizer for smooth driving. Range: (0, 1]. |
-| `smoothing_factor` | `0.6` | Exponential moving average coefficient between consecutive actions: `a_t = α · a_{t-1} + (1 − α) · a_raw`. Higher = more inertia, smoother but less responsive. `0.0` = no smoothing. Range: [0, 1). |
+| `type` | `continuous` | Action space type. `continuous` = real-valued throttle/steering via `ContinuousAction`. `discrete` = the standard 5-action `DiscreteMetaAction` (LANE_LEFT, IDLE, LANE_RIGHT, FASTER, SLOWER). Discrete is far easier to learn and recommended for initial pipeline validation. |
+| `longitudinal` | `true` | *(Continuous only)* Whether the agent controls acceleration/braking. If `false`, the car drives at a fixed speed. |
+| `lateral` | `true` | *(Continuous only)* Whether the agent controls steering. If `false`, no lane changes. |
+| `longitudinal_scale` | `0.7` | *(Continuous only)* Multiplier applied to the raw longitudinal action before sending it to the environment. `0.7` limits max acceleration to 70%, preventing excessive speed that causes off-road spinouts. Range: (0, 1]. |
+| `lateral_scale` | `0.35` | *(Continuous only)* Multiplier on steering. `0.35` compresses the steering range to ~35% of maximum, preventing wild swerving. This is the single biggest stabilizer for smooth driving. Range: (0, 1]. |
+| `smoothing_factor` | `0.6` | *(Continuous only)* Exponential moving average coefficient between consecutive actions: `a_t = α · a_{t-1} + (1 − α) · a_raw`. Higher = more inertia, smoother but less responsive. `0.0` = no smoothing. Range: [0, 1). |
+| `num_actions` | `5` | *(Discrete only)* Number of discrete actions. Highway-env's default `DiscreteMetaAction` has 5 actions. Only relevant when `type: discrete`. Range: 2–20. |
 
 ### `env.reward` — Reward Shaping
 
@@ -119,6 +120,12 @@ Example YAML files live in `examples/`.
 All model dimension defaults match the open-source DreamerV1 reference implementation.
 These are parsed into `ModelConfig` inside `ExperimentConfig`.
 
+**Actor type is selected automatically** based on `env.action.type`:
+- `continuous` → `Actor` (tanh-normal distribution, reparameterised sampling)
+- `discrete` → `DiscreteActor` (categorical logits, Gumbel-Softmax straight-through for differentiable imagination)
+
+When using discrete actions, the `actor_init_std`, `actor_mean_scale`, and `actor_min_std` fields are ignored — they only apply to the continuous tanh-normal actor.
+
 | Setting | Default | Purpose |
 |---|---|---|
 | `embedding_dim` | `1024` | Output dimension of the CNN encoder. The encoder maps 64×64 grayscale images to a flat vector of this size. Larger = richer visual features at the cost of more parameters. Range: 32–4096. |
@@ -129,9 +136,9 @@ These are parsed into `ModelConfig` inside `ExperimentConfig`.
 | `rssm_min_std` | `0.1` | Minimum standard deviation added to RSSM prior/posterior distributions for numerical stability. |
 | `actor_hidden_dim` | `200` | Hidden layer width for the actor (policy) network. Range: 32–2048. |
 | `actor_num_layers` | `2` | Number of hidden layers in the actor MLP. Range: 1–4. |
-| `actor_init_std` | `1.0` | Initial exploration standard deviation for the tanh-normal actor. Reduced from 5.0 to prevent violent swerves in continuous highway control. |
-| `actor_mean_scale` | `5.0` | Scaling factor applied to the actor mean before the tanh transform. |
-| `actor_min_std` | `1e-4` | Minimum actor standard deviation to avoid collapsed exploration. |
+| `actor_init_std` | `1.0` | *(Continuous only)* Initial exploration standard deviation for the tanh-normal actor. Reduced from 5.0 to prevent violent swerves in continuous highway control. |
+| `actor_mean_scale` | `5.0` | *(Continuous only)* Scaling factor applied to the actor mean before the tanh transform. |
+| `actor_min_std` | `1e-4` | *(Continuous only)* Minimum actor standard deviation to avoid collapsed exploration. |
 | `critic_hidden_dim` | `200` | Hidden layer width for the critic (value) network. Range: 32–2048. |
 | `critic_num_layers` | `3` | Number of hidden layers in the critic MLP. `3` matches DreamerV1. Range: 1–6. |
 | `critic_distribution_std` | `1.0` | Fixed standard deviation used by the critic's Gaussian likelihood head. |

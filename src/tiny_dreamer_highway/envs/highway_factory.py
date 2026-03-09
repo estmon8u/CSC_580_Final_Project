@@ -47,6 +47,8 @@ class DrivingPenaltyRewardWrapper(gym.Wrapper):
 
 
 def _extract_lateral_action(action: Any, config: EnvConfig) -> float:
+    if config.action.is_discrete:
+        return 0.0
     action_array = np.asarray(action, dtype=np.float32).reshape(-1)
     if action_array.size == 0 or not config.action.lateral:
         return 0.0
@@ -56,6 +58,8 @@ def _extract_lateral_action(action: Any, config: EnvConfig) -> float:
 
 
 def _should_apply_reward_wrapper(config: EnvConfig) -> bool:
+    if config.action.is_discrete:
+        return False
     reward_config = config.reward
     return (
         reward_config.offroad_penalty > 0.0
@@ -65,6 +69,16 @@ def _should_apply_reward_wrapper(config: EnvConfig) -> bool:
 
 
 def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
+    if config.action.is_discrete:
+        action_block: dict[str, Any] = {
+            "type": "DiscreteMetaAction",
+        }
+    else:
+        action_block = {
+            "type": "ContinuousAction",
+            "longitudinal": config.action.longitudinal,
+            "lateral": config.action.lateral,
+        }
     return {
         "observation": {
             "type": "GrayscaleObservation",
@@ -73,11 +87,7 @@ def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
             "weights": [0.2989, 0.5870, 0.1140],
             "scaling": 1.75,
         },
-        "action": {
-            "type": "ContinuousAction",
-            "longitudinal": config.action.longitudinal,
-            "lateral": config.action.lateral,
-        },
+        "action": action_block,
         "lanes_count": config.lanes_count,
         "vehicles_count": config.vehicles_count,
         "simulation_frequency": config.simulation_frequency,
