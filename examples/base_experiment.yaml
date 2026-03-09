@@ -52,6 +52,7 @@ training:
   kl_weight: 1.0
   free_nats: 3.0
   continue_loss_weight: 1.0
+  grad_clip_norm: 100.0
   world_model_updates_per_cycle: 1
   behavior_updates_per_cycle: 1
   cycles: 10

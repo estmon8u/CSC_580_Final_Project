@@ -53,6 +53,7 @@ training:
   free_nats: 3.0
   continue_loss_weight: 1.0
   grad_clip_norm: 100.0
+  lr_warmup_steps: 50
   world_model_updates_per_cycle: 4
   behavior_updates_per_cycle: 4
   cycles: 500
