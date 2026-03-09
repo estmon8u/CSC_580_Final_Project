@@ -8,7 +8,9 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -103,3 +105,27 @@ class ReplayBuffer:
             ordered[start_index : start_index + sequence_length]
             for start_index in start_indices.tolist()
         ]
+
+    # ------------------------------------------------------------------
+    # Serialisation helpers for checkpoint / resume
+    # ------------------------------------------------------------------
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return a serialisable snapshot of the buffer for checkpointing."""
+        return {
+            "capacity": self.capacity,
+            "transitions": list(self.transitions),
+            "position": self._position,
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore replay buffer contents from a checkpoint snapshot."""
+        if state["capacity"] != self.capacity:
+            warnings.warn(
+                f"Replay buffer capacity mismatch: checkpoint has {state['capacity']}, "
+                f"current config has {self.capacity}. Buffer will be loaded but may "
+                "behave unexpectedly if the saved data exceeds the new capacity.",
+                stacklevel=2,
+            )
+        self.transitions = list(state["transitions"])
+        self._position = int(state["position"])

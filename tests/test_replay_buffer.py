@@ -82,3 +82,23 @@ def test_replay_buffer_sample_sequences_use_chronological_order_after_wraparound
     sequence = buffer.sample_sequences(batch_size=1, sequence_length=3)[0]
     observations = [int(transition.observation[0, 0]) for transition in sequence]
     assert observations in ([2, 3, 4], [3, 4, 5])
+
+
+def test_replay_buffer_state_dict_round_trip() -> None:
+    buffer = ReplayBuffer(capacity=8)
+    for seed in range(6):
+        buffer.add(make_transition(seed))
+
+    state = buffer.state_dict()
+    assert state["capacity"] == 8
+    assert len(state["transitions"]) == 6
+    assert state["position"] == 6
+
+    restored = ReplayBuffer(capacity=8)
+    restored.load_state_dict(state)
+    assert len(restored) == 6
+    assert restored._position == 6
+    for original, loaded in zip(buffer.transitions, restored.transitions):
+        assert original.reward == loaded.reward
+        assert (original.observation == loaded.observation).all()
+        assert (original.next_observation == loaded.next_observation).all()

@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 
+from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 from tiny_dreamer_highway.models import Actor, Critic, TinyWorldModel
 from tiny_dreamer_highway.training import (
     checkpoint_path,
@@ -9,6 +11,7 @@ from tiny_dreamer_highway.training import (
     load_checkpoint,
     save_checkpoint,
 )
+from tiny_dreamer_highway.types import Transition
 
 
 def test_checkpoint_path_formats_step_with_padding(tmp_path: Path) -> None:
@@ -73,3 +76,64 @@ def test_find_latest_checkpoint_returns_highest_step(tmp_path: Path) -> None:
 
     assert find_latest_checkpoint(tmp_path) == latest
     assert find_latest_checkpoint(tmp_path / "missing") is None
+
+
+def _make_transition(seed: int) -> Transition:
+    return Transition(
+        observation=np.full((1, 64, 64), seed, dtype=np.uint8),
+        action=np.asarray([seed / 10, seed / 20], dtype=np.float32),
+        reward=float(seed),
+        next_observation=np.full((1, 64, 64), seed + 1, dtype=np.uint8),
+        done=False,
+        terminated=False,
+        truncated=False,
+    )
+
+
+def test_save_and_load_checkpoint_persists_replay_buffer(tmp_path: Path) -> None:
+    torch.manual_seed(7)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+    critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
+    world_optimizer = torch.optim.Adam(world_model.parameters(), lr=1e-3)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
+
+    # Fill a replay buffer with known data
+    buffer = ReplayBuffer(capacity=16)
+    for i in range(10):
+        buffer.add(_make_transition(i))
+
+    checkpoint_file = save_checkpoint(
+        tmp_path, step=5,
+        world_model=world_model, actor=actor, critic=critic,
+        world_model_optimizer=world_optimizer,
+        actor_optimizer=actor_optimizer,
+        critic_optimizer=critic_optimizer,
+        replay_buffer=buffer,
+    )
+
+    # Companion replay file should exist
+    replay_file = checkpoint_file.with_name("replay_00005.pt")
+    assert replay_file.exists()
+
+    # Restore into a fresh buffer
+    restored_buffer = ReplayBuffer(capacity=16)
+    load_checkpoint(
+        checkpoint_file,
+        world_model=world_model, actor=actor, critic=critic,
+        world_model_optimizer=world_optimizer,
+        actor_optimizer=actor_optimizer,
+        critic_optimizer=critic_optimizer,
+        replay_buffer=restored_buffer,
+    )
+
+    assert len(restored_buffer) == 10
+    assert restored_buffer._position == buffer._position
+    assert np.array_equal(
+        restored_buffer.transitions[0].observation,
+        buffer.transitions[0].observation,
+    )

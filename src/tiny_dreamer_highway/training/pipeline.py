@@ -262,7 +262,12 @@ def run_training_cycle(
             batch_size=batch_size, sequence_length=sequence_length,
         )
         seq_batch = stack_sequence_batch(sequences)
-        observations = torch.as_tensor(seq_batch.observations, device=model_device)
+        # Replay stores (obs_t, action_t, reward_t, next_obs_t) where action_t
+        # leads FROM obs_t TO next_obs_t.  The RSSM observe_step advances the
+        # deterministic state with the supplied action *before* conditioning on
+        # the observation embedding, so the observation paired with action_t
+        # must be the post-action observation = next_obs_t.
+        observations = torch.as_tensor(seq_batch.next_observations, device=model_device)
         actions = torch.as_tensor(seq_batch.actions, dtype=torch.float32, device=model_device)
         rewards = torch.as_tensor(seq_batch.rewards, dtype=torch.float32, device=model_device)
 
@@ -307,9 +312,9 @@ def run_training_cycle(
                 stochastic=all_sto[indices],
             )
         else:
-            # Fallback: seed from replay buffer
+            # Fallback: seed from replay buffer (same post-action alignment)
             batch = replay_buffer.sample_batch(batch_size=batch_size)
-            observations = torch.as_tensor(batch.observations, device=model_device)
+            observations = torch.as_tensor(batch.next_observations, device=model_device)
             actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
             start_state = seed_latent_state(world_model, observations, actions, amp_context=amp_context)
         behavior_metrics = train_behavior_step(

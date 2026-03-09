@@ -9,10 +9,13 @@ AI tools consulted: GitHub Copilot
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import nn, optim
+
+if TYPE_CHECKING:
+    from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 
 
 def checkpoint_path(checkpoint_dir: str | Path, step: int) -> Path:
@@ -31,6 +34,7 @@ def save_checkpoint(
     actor_optimizer: optim.Optimizer,
     critic_optimizer: optim.Optimizer,
     metrics: dict[str, Any] | None = None,
+    replay_buffer: ReplayBuffer | None = None,
 ) -> Path:
     path = checkpoint_path(checkpoint_dir, step)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +49,13 @@ def save_checkpoint(
         "metrics": metrics or {},
     }
     torch.save(payload, path)
+
+    # Save replay buffer to a separate file so the main checkpoint stays
+    # lightweight and can be loaded even without the buffer.
+    if replay_buffer is not None:
+        replay_path = path.with_name(f"replay_{step:05d}.pt")
+        torch.save(replay_buffer.state_dict(), replay_path)
+
     return path
 
 
@@ -57,6 +68,7 @@ def load_checkpoint(
     actor_optimizer: optim.Optimizer,
     critic_optimizer: optim.Optimizer,
     map_location: str | torch.device = "cpu",
+    replay_buffer: ReplayBuffer | None = None,
 ) -> dict[str, Any]:
     checkpoint = torch.load(Path(checkpoint_file), map_location=map_location, weights_only=False)
     world_model.load_state_dict(checkpoint["world_model"])
@@ -65,6 +77,15 @@ def load_checkpoint(
     world_model_optimizer.load_state_dict(checkpoint["world_model_optimizer"])
     actor_optimizer.load_state_dict(checkpoint["actor_optimizer"])
     critic_optimizer.load_state_dict(checkpoint["critic_optimizer"])
+
+    # Restore replay buffer from its companion file (if present)
+    if replay_buffer is not None:
+        step = int(checkpoint["step"])
+        replay_path = Path(checkpoint_file).with_name(f"replay_{step:05d}.pt")
+        if replay_path.exists():
+            replay_state = torch.load(replay_path, weights_only=False)
+            replay_buffer.load_state_dict(replay_state)
+
     return {
         "step": int(checkpoint["step"]),
         "metrics": dict(checkpoint.get("metrics", {})),

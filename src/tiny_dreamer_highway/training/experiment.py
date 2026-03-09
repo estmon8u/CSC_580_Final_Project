@@ -295,6 +295,7 @@ def run_training_experiment(
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
             map_location=resolve_training_device(config.device),
+            replay_buffer=replay_buffer,
         )
         start_step = int(metadata["step"]) + 1
 
@@ -373,10 +374,20 @@ def run_training_experiment(
                 seed=config.seed + step * 1_000,
             )
 
-        # Step LR warm-up schedulers (no-op when scheduler is None)
-        for scheduler in (wm_scheduler, actor_scheduler, critic_scheduler):
-            if scheduler is not None:
-                scheduler.step()
+        # Step LR warm-up schedulers once per *optimizer step*, not once per
+        # cycle.  Each cycle performs world_model_updates_per_cycle WM steps
+        # and behavior_updates_per_cycle actor/critic steps.
+        n_wm = config.training.world_model_updates_per_cycle
+        n_beh = config.training.behavior_updates_per_cycle
+        if wm_scheduler is not None:
+            for _ in range(n_wm):
+                wm_scheduler.step()
+        if actor_scheduler is not None:
+            for _ in range(n_beh):
+                actor_scheduler.step()
+        if critic_scheduler is not None:
+            for _ in range(n_beh):
+                critic_scheduler.step()
 
         checkpoint_file = None
         if step % save_every == 0 or step == total_cycles:
@@ -391,6 +402,7 @@ def run_training_experiment(
                 actor_optimizer=actor_optimizer,
                 critic_optimizer=critic_optimizer,
                 metrics=flattened,
+                replay_buffer=replay_buffer,
             )
             latest_checkpoint = checkpoint_file
 
