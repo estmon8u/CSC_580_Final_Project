@@ -24,7 +24,6 @@ from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Crit
 from tiny_dreamer_highway.models.discrete_actor import DiscreteActor
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
 from tiny_dreamer_highway.training.sequence_world_model_step import (
-    stack_sequence_batch,
     train_sequence_world_model_step,
 )
 from tiny_dreamer_highway.training.world_model_step import train_world_model_step
@@ -151,7 +150,7 @@ def collect_actor_transitions(
 
     try:
         for _ in range(steps):
-            with torch.no_grad():
+            with torch.inference_mode():
                 # 1. Encode current observation → posterior (uses previous action for GRU)
                 observation_tensor = _observation_to_tensor(
                     np.asarray(observation, dtype=np.uint8)
@@ -258,10 +257,9 @@ def run_training_cycle(
     # Collect posterior states from WM training for behavior update start states
     all_posterior_states: list[LatentState] = []
     for _ in range(training_config.world_model_updates_per_cycle):
-        sequences = replay_buffer.sample_sequences(
+        seq_batch = replay_buffer.sample_sequence_batch(
             batch_size=batch_size, sequence_length=sequence_length,
         )
-        seq_batch = stack_sequence_batch(sequences)
         # Replay stores (obs_t, action_t, reward_t, next_obs_t) where action_t
         # leads FROM obs_t TO next_obs_t.  The RSSM observe_step advances the
         # deterministic state with the supplied action *before* conditioning on

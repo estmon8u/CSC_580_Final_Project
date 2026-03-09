@@ -199,7 +199,7 @@ def run_policy_episode(
                 frames.append(np.asarray(frame, dtype=np.uint8))
 
         for _ in range(max_steps):
-            with torch.no_grad():
+            with torch.inference_mode():
                 # 1. Encode current observation → posterior (uses previous action for GRU)
                 obs_tensor = _observation_to_tensor(observation, device)
                 output = world_model(obs_tensor, prev_action, prev_state=prev_state)

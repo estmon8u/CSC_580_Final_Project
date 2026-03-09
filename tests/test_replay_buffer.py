@@ -91,7 +91,7 @@ def test_replay_buffer_state_dict_round_trip() -> None:
 
     state = buffer.state_dict()
     assert state["capacity"] == 8
-    assert len(state["transitions"]) == 6
+    assert state["size"] == 6
     assert state["position"] == 6
 
     restored = ReplayBuffer(capacity=8)

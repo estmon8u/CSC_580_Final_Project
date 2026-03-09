@@ -4,107 +4,327 @@ Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
+
+Performance notes
+-----------------
+Internal storage uses preallocated NumPy arrays rather than a
+``list[Transition]``.  Arrays are lazily allocated on the first
+``add()`` call so no observation/action shape is required at
+construction.  Sequence-start validity is cached and invalidated
+on ``add()``.  A fast ``sample_sequence_batch()`` method returns
+a ready-to-use ``ReplaySequenceBatch`` via vectorised fancy
+indexing — no Python loops in the sampling hot-path.
 """
 
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
-from tiny_dreamer_highway.types import ReplayBatch, Transition
+from tiny_dreamer_highway.types import ReplayBatch, ReplaySequenceBatch, Transition
 
 
-@dataclass(slots=True)
 class ReplayBuffer:
-    capacity: int
-    transitions: list[Transition] = field(default_factory=list)
-    _position: int = 0
+    """Ring-buffer backed by preallocated NumPy arrays.
 
-    def __post_init__(self) -> None:
-        if self.capacity <= 0:
+    Arrays are lazily allocated on the first ``add()`` call, so no
+    observation / action shape needs to be known at construction.
+    """
+
+    __slots__ = (
+        "capacity",
+        "_size",
+        "_position",
+        "_obs",
+        "_act",
+        "_rew",
+        "_next_obs",
+        "_dones",
+        "_terminated",
+        "_truncated",
+        "_valid_starts_cache",
+    )
+
+    def __init__(self, capacity: int) -> None:
+        if capacity <= 0:
             raise ValueError("capacity must be positive")
+        self.capacity = capacity
+        self._size: int = 0
+        self._position: int = 0
+        self._obs: NDArray[np.uint8] | None = None
+        self._act: NDArray[np.float32] | None = None
+        self._rew: NDArray[np.float32] | None = None
+        self._next_obs: NDArray[np.uint8] | None = None
+        self._dones: NDArray[np.bool_] | None = None
+        self._terminated: NDArray[np.bool_] | None = None
+        self._truncated: NDArray[np.bool_] | None = None
+        self._valid_starts_cache: dict[int, list[int]] = {}
+
+    # ------------------------------------------------------------------
+    # Size helpers
+    # ------------------------------------------------------------------
 
     def __len__(self) -> int:
-        return len(self.transitions)
+        return self._size
 
-    def _ordered_transitions(self) -> list[Transition]:
-        if len(self.transitions) < self.capacity:
-            return list(self.transitions)
-        return self.transitions[self._position :] + self.transitions[: self._position]
+    # ------------------------------------------------------------------
+    # Internal allocation and indexing
+    # ------------------------------------------------------------------
+
+    def _allocate(
+        self,
+        obs_shape: tuple[int, ...],
+        act_shape: tuple[int, ...],
+    ) -> None:
+        """Pre-allocate storage once the shapes are known."""
+        cap = self.capacity
+        self._obs = np.empty((cap, *obs_shape), dtype=np.uint8)
+        self._act = np.empty((cap, *act_shape), dtype=np.float32)
+        self._rew = np.empty(cap, dtype=np.float32)
+        self._next_obs = np.empty((cap, *obs_shape), dtype=np.uint8)
+        self._dones = np.empty(cap, dtype=np.bool_)
+        self._terminated = np.empty(cap, dtype=np.bool_)
+        self._truncated = np.empty(cap, dtype=np.bool_)
+
+    def _logical_to_physical(
+        self,
+        logical: NDArray[np.int64] | int,
+    ) -> NDArray[np.int64] | int:
+        """Map chronological (logical) indices to ring-buffer positions."""
+        if self._size < self.capacity:
+            return logical
+        return (logical + self._position) % self.capacity
+
+    # ------------------------------------------------------------------
+    # Mutators
+    # ------------------------------------------------------------------
 
     def add(self, transition: Transition) -> None:
-        if len(self.transitions) < self.capacity:
-            self.transitions.append(transition)
-        else:
-            self.transitions[self._position] = transition
-        self._position = (self._position + 1) % self.capacity
+        if self._obs is None:
+            self._allocate(transition.observation.shape, transition.action.shape)
+
+        idx = self._position
+        self._obs[idx] = transition.observation
+        self._act[idx] = transition.action
+        self._rew[idx] = transition.reward
+        self._next_obs[idx] = transition.next_observation
+        self._dones[idx] = transition.done
+        self._terminated[idx] = transition.terminated
+        self._truncated[idx] = transition.truncated
+
+        self._position = (idx + 1) % self.capacity
+        if self._size < self.capacity:
+            self._size += 1
+
+        # Invalidate cached sequence-start indices
+        self._valid_starts_cache.clear()
+
+    # ------------------------------------------------------------------
+    # Backward-compatible property (test / debug only)
+    # ------------------------------------------------------------------
+
+    @property
+    def transitions(self) -> list[Transition]:
+        """Reconstruct ``list[Transition]`` in physical ring-buffer order.
+
+        Provided for backward compatibility with tests and serialisation.
+        **Do not use on the training hot-path.**
+        """
+        if self._obs is None:
+            return []
+        return [
+            Transition(
+                observation=self._obs[i],
+                action=self._act[i],
+                reward=float(self._rew[i]),
+                next_observation=self._next_obs[i],
+                done=bool(self._dones[i]),
+                terminated=bool(self._terminated[i]),
+                truncated=bool(self._truncated[i]),
+            )
+            for i in range(self._size)
+        ]
+
+    # ------------------------------------------------------------------
+    # Sequence-start cache (vectorised via cumulative sum)
+    # ------------------------------------------------------------------
 
     def valid_sequence_start_indices(self, sequence_length: int) -> list[int]:
+        """Return chronological start indices for contiguous non-terminal windows.
+
+        Results are cached and invalidated on ``add()``.
+        """
         if sequence_length <= 0:
             raise ValueError("sequence_length must be positive")
 
-        ordered = self._ordered_transitions()
-        max_start = len(ordered) - sequence_length
-        if max_start < 0:
+        if sequence_length in self._valid_starts_cache:
+            return self._valid_starts_cache[sequence_length]
+
+        if self._size < sequence_length:
+            self._valid_starts_cache[sequence_length] = []
             return []
 
-        return [
-            start_index
-            for start_index in range(max_start + 1)
-            if not any(transition.done for transition in ordered[start_index : start_index + sequence_length - 1])
-        ]
+        if sequence_length == 1:
+            result = list(range(self._size))
+            self._valid_starts_cache[sequence_length] = result
+            return result
+
+        # Build chronological done mask
+        if self._size < self.capacity:
+            ordered_dones = self._dones[: self._size]
+        else:
+            ordered_dones = np.concatenate(
+                [self._dones[self._position :], self._dones[: self._position]]
+            )
+
+        max_start = self._size - sequence_length
+        window = sequence_length - 1
+
+        # Cumulative-sum trick: window_sum[s] == 0 ⟹ no done in [s, s+window)
+        done_int = ordered_dones.astype(np.int32)
+        cs = np.empty(self._size + 1, dtype=np.int32)
+        cs[0] = 0
+        np.cumsum(done_int, out=cs[1:])
+
+        starts = np.arange(max_start + 1, dtype=np.int64)
+        window_sums = cs[starts + window] - cs[starts]
+        valid: list[int] = starts[window_sums == 0].tolist()
+
+        self._valid_starts_cache[sequence_length] = valid
+        return valid
+
+    # ------------------------------------------------------------------
+    # Sampling predicates
+    # ------------------------------------------------------------------
 
     def can_sample(self, batch_size: int, sequence_length: int = 1) -> bool:
         if sequence_length <= 1:
-            return len(self.transitions) >= max(batch_size, sequence_length)
-
+            return self._size >= max(batch_size, sequence_length)
         return len(self.valid_sequence_start_indices(sequence_length)) > 0
+
+    # ------------------------------------------------------------------
+    # Batch sampling (vectorised — no Python loop)
+    # ------------------------------------------------------------------
 
     def sample_batch(self, batch_size: int) -> ReplayBatch:
         if not self.can_sample(batch_size=batch_size):
             raise ValueError(
                 f"not enough transitions to sample a batch "
-                f"(requested {batch_size}, have {len(self.transitions)})"
+                f"(requested {batch_size}, have {self._size})"
             )
 
-        allow_replacement = batch_size > len(self.transitions)
-        indices = np.random.choice(len(self.transitions), size=batch_size, replace=allow_replacement)
-        selected = [self.transitions[index] for index in indices]
+        assert self._obs is not None
+        allow_replacement = batch_size > self._size
+        indices = np.random.choice(self._size, size=batch_size, replace=allow_replacement)
+
         return ReplayBatch(
-            observations=np.stack([item.observation for item in selected]).astype(np.uint8),
-            actions=np.stack([item.action for item in selected]).astype(np.float32),
-            rewards=np.asarray([item.reward for item in selected], dtype=np.float32),
-            next_observations=np.stack([item.next_observation for item in selected]).astype(np.uint8),
-            dones=np.asarray([item.done for item in selected], dtype=np.bool_),
-            terminals=np.asarray([item.terminated for item in selected], dtype=np.bool_),
-            truncations=np.asarray([item.truncated for item in selected], dtype=np.bool_),
+            observations=self._obs[indices],
+            actions=self._act[indices],
+            rewards=self._rew[indices],
+            next_observations=self._next_obs[indices],
+            dones=self._dones[indices],
+            terminals=self._terminated[indices],
+            truncations=self._truncated[indices],
         )
 
-    def sample_sequences(self, batch_size: int, sequence_length: int) -> list[list[Transition]]:
+    # ------------------------------------------------------------------
+    # Sequence sampling
+    # ------------------------------------------------------------------
+
+    def sample_sequences(
+        self,
+        batch_size: int,
+        sequence_length: int,
+    ) -> list[list[Transition]]:
+        """Sample sequences as ``list[list[Transition]]`` (backward compat).
+
+        Prefer :meth:`sample_sequence_batch` on the training hot-path.
+        """
         if sequence_length <= 0:
             raise ValueError("sequence_length must be positive")
         if not self.can_sample(batch_size=batch_size, sequence_length=sequence_length):
             raise ValueError("not enough transitions to sample sequences")
 
-        ordered = self._ordered_transitions()
-        valid_start_indices = self.valid_sequence_start_indices(sequence_length)
-        if not valid_start_indices:
-            raise ValueError("no valid sequences available without crossing episode boundaries")
+        valid_starts = self.valid_sequence_start_indices(sequence_length)
+        if not valid_starts:
+            raise ValueError(
+                "no valid sequences available without crossing episode boundaries"
+            )
 
-        allow_replacement = batch_size > len(valid_start_indices)
-        start_indices = np.random.choice(
-            np.asarray(valid_start_indices, dtype=np.int64),
+        allow_replacement = batch_size > len(valid_starts)
+        chosen = np.random.choice(
+            np.asarray(valid_starts, dtype=np.int64),
             size=batch_size,
             replace=allow_replacement,
         )
-        return [
-            ordered[start_index : start_index + sequence_length]
-            for start_index in start_indices.tolist()
-        ]
+
+        assert self._obs is not None
+        offsets = np.arange(sequence_length, dtype=np.int64)
+        result: list[list[Transition]] = []
+        for s in chosen:
+            logical = int(s) + offsets
+            physical = self._logical_to_physical(logical)
+            result.append(
+                [
+                    Transition(
+                        observation=self._obs[p],
+                        action=self._act[p],
+                        reward=float(self._rew[p]),
+                        next_observation=self._next_obs[p],
+                        done=bool(self._dones[p]),
+                        terminated=bool(self._terminated[p]),
+                        truncated=bool(self._truncated[p]),
+                    )
+                    for p in physical
+                ]
+            )
+        return result
+
+    def sample_sequence_batch(
+        self,
+        batch_size: int,
+        sequence_length: int,
+    ) -> ReplaySequenceBatch:
+        """Fast vectorised sequence sampling — no Python loops.
+
+        Returns a ready-to-use :class:`ReplaySequenceBatch` built
+        entirely via NumPy fancy indexing.
+        """
+        if sequence_length <= 0:
+            raise ValueError("sequence_length must be positive")
+        if not self.can_sample(batch_size=batch_size, sequence_length=sequence_length):
+            raise ValueError("not enough transitions to sample sequences")
+
+        valid_starts = self.valid_sequence_start_indices(sequence_length)
+        if not valid_starts:
+            raise ValueError(
+                "no valid sequences available without crossing episode boundaries"
+            )
+
+        allow_replacement = batch_size > len(valid_starts)
+        chosen = np.random.choice(
+            np.asarray(valid_starts, dtype=np.int64),
+            size=batch_size,
+            replace=allow_replacement,
+        )
+
+        assert self._obs is not None
+        offsets = np.arange(sequence_length, dtype=np.int64)
+        logical = chosen[:, None] + offsets[None, :]  # (B, T)
+        physical = self._logical_to_physical(logical)  # (B, T)
+
+        return ReplaySequenceBatch(
+            observations=self._obs[physical],
+            actions=self._act[physical],
+            rewards=self._rew[physical],
+            next_observations=self._next_obs[physical],
+            dones=self._dones[physical],
+            terminals=self._terminated[physical],
+            truncations=self._truncated[physical],
+        )
 
     # ------------------------------------------------------------------
     # Serialisation helpers for checkpoint / resume
@@ -112,20 +332,81 @@ class ReplayBuffer:
 
     def state_dict(self) -> dict[str, Any]:
         """Return a serialisable snapshot of the buffer for checkpointing."""
+        if self._obs is None:
+            return {
+                "format": "tensorized",
+                "capacity": self.capacity,
+                "size": 0,
+                "position": 0,
+            }
         return {
+            "format": "tensorized",
             "capacity": self.capacity,
-            "transitions": list(self.transitions),
+            "size": self._size,
             "position": self._position,
+            "observations": self._obs[: self._size].copy(),
+            "actions": self._act[: self._size].copy(),
+            "rewards": self._rew[: self._size].copy(),
+            "next_observations": self._next_obs[: self._size].copy(),
+            "dones": self._dones[: self._size].copy(),
+            "terminated": self._terminated[: self._size].copy(),
+            "truncated": self._truncated[: self._size].copy(),
         }
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        """Restore replay buffer contents from a checkpoint snapshot."""
-        if state["capacity"] != self.capacity:
+        """Restore replay buffer contents from a checkpoint snapshot.
+
+        Handles both the new *tensorized* format and the legacy format
+        that stored ``list[Transition]``.
+        """
+        saved_cap = state.get("capacity", self.capacity)
+        if saved_cap != self.capacity:
             warnings.warn(
-                f"Replay buffer capacity mismatch: checkpoint has {state['capacity']}, "
+                f"Replay buffer capacity mismatch: checkpoint has {saved_cap}, "
                 f"current config has {self.capacity}. Buffer will be loaded but may "
                 "behave unexpectedly if the saved data exceeds the new capacity.",
                 stacklevel=2,
             )
-        self.transitions = list(state["transitions"])
-        self._position = int(state["position"])
+
+        if state.get("format") == "tensorized":
+            size = int(state["size"])
+            if size == 0:
+                self._size = 0
+                self._position = 0
+                self._valid_starts_cache.clear()
+                return
+
+            obs = state["observations"]
+            self._allocate(obs.shape[1:], state["actions"].shape[1:])
+            n = min(size, self.capacity)
+            self._obs[:n] = state["observations"][:n]
+            self._act[:n] = state["actions"][:n]
+            self._rew[:n] = state["rewards"][:n]
+            self._next_obs[:n] = state["next_observations"][:n]
+            self._dones[:n] = state["dones"][:n]
+            self._terminated[:n] = state["terminated"][:n]
+            self._truncated[:n] = state["truncated"][:n]
+            self._size = n
+            self._position = int(state["position"]) if n == size else n % self.capacity
+        else:
+            # Legacy format: list[Transition]
+            transitions = state["transitions"]
+            if not transitions:
+                return
+
+            first = transitions[0]
+            self._allocate(first.observation.shape, first.action.shape)
+            n = min(len(transitions), self.capacity)
+            for i in range(n):
+                t = transitions[i]
+                self._obs[i] = t.observation
+                self._act[i] = t.action
+                self._rew[i] = t.reward
+                self._next_obs[i] = t.next_observation
+                self._dones[i] = t.done
+                self._terminated[i] = t.terminated
+                self._truncated[i] = t.truncated
+            self._size = n
+            self._position = int(state["position"])
+
+        self._valid_starts_cache.clear()

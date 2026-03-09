@@ -196,10 +196,6 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
             "total_loss": 4.5,
         }
 
-    def fake_stack_sequence_batch(sequences):
-        from tiny_dreamer_highway.training.sequence_world_model_step import stack_sequence_batch
-        return stack_sequence_batch(sequences)
-
     def fake_seed_latent_state(*args, **kwargs):
         return world_model.rssm.initial_state(batch_size=4)
 
@@ -215,10 +211,6 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
     monkeypatch.setattr(
         "tiny_dreamer_highway.training.pipeline.train_sequence_world_model_step",
         fake_train_sequence_world_model_step,
-    )
-    monkeypatch.setattr(
-        "tiny_dreamer_highway.training.pipeline.stack_sequence_batch",
-        fake_stack_sequence_batch,
     )
     monkeypatch.setattr(
         "tiny_dreamer_highway.training.pipeline.seed_latent_state",
