@@ -304,6 +304,17 @@ def run_training_experiment(
     actor_scheduler = _make_warmup_scheduler(actor_optimizer, config.training.lr_warmup_steps)
     critic_scheduler = _make_warmup_scheduler(critic_optimizer, config.training.lr_warmup_steps)
 
+    # Restore scheduler state from checkpoint so warmup continues correctly
+    if resume_from is not None:
+        saved_schedulers = metadata.get("schedulers")
+        if saved_schedulers is not None:
+            if wm_scheduler is not None and "wm_scheduler" in saved_schedulers:
+                wm_scheduler.load_state_dict(saved_schedulers["wm_scheduler"])
+            if actor_scheduler is not None and "actor_scheduler" in saved_schedulers:
+                actor_scheduler.load_state_dict(saved_schedulers["actor_scheduler"])
+            if critic_scheduler is not None and "critic_scheduler" in saved_schedulers:
+                critic_scheduler.load_state_dict(saved_schedulers["critic_scheduler"])
+
     # AMP – automatic mixed precision (disabled by default)
     device = resolve_training_device(config.device)
     if config.training.use_amp and device.type == "cuda":
@@ -392,6 +403,13 @@ def run_training_experiment(
         checkpoint_file = None
         if step % save_every == 0 or step == total_cycles:
             flattened = flatten_cycle_metrics(step, latest_metrics)
+            scheduler_states: dict[str, Any] = {}
+            if wm_scheduler is not None:
+                scheduler_states["wm_scheduler"] = wm_scheduler.state_dict()
+            if actor_scheduler is not None:
+                scheduler_states["actor_scheduler"] = actor_scheduler.state_dict()
+            if critic_scheduler is not None:
+                scheduler_states["critic_scheduler"] = critic_scheduler.state_dict()
             checkpoint_file = save_checkpoint(
                 checkpoint_dir=checkpoint_dir,
                 step=step,
@@ -403,6 +421,7 @@ def run_training_experiment(
                 critic_optimizer=critic_optimizer,
                 metrics=flattened,
                 replay_buffer=replay_buffer,
+                schedulers=scheduler_states if scheduler_states else None,
             )
             latest_checkpoint = checkpoint_file
 

@@ -62,7 +62,9 @@ def test_save_and_load_checkpoint_round_trip(tmp_path: Path) -> None:
         critic_optimizer=critic_optimizer,
     )
 
-    assert metadata == {"step": 3, "metrics": {"loss": 1.23}}
+    assert metadata["step"] == 3
+    assert metadata["metrics"] == {"loss": 1.23}
+    assert metadata["schedulers"] is None  # no schedulers saved
     assert torch.allclose(next(world_model.parameters()), original_world)
     assert torch.allclose(next(actor.parameters()), original_actor)
     assert torch.allclose(next(critic.parameters()), original_critic)

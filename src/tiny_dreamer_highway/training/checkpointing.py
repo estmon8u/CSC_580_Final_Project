@@ -35,6 +35,7 @@ def save_checkpoint(
     critic_optimizer: optim.Optimizer,
     metrics: dict[str, Any] | None = None,
     replay_buffer: ReplayBuffer | None = None,
+    schedulers: dict[str, Any] | None = None,
 ) -> Path:
     path = checkpoint_path(checkpoint_dir, step)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,6 +49,8 @@ def save_checkpoint(
         "critic_optimizer": critic_optimizer.state_dict(),
         "metrics": metrics or {},
     }
+    if schedulers is not None:
+        payload["schedulers"] = schedulers
     torch.save(payload, path)
 
     # Save replay buffer to a separate file so the main checkpoint stays
@@ -89,6 +92,7 @@ def load_checkpoint(
     return {
         "step": int(checkpoint["step"]),
         "metrics": dict(checkpoint.get("metrics", {})),
+        "schedulers": checkpoint.get("schedulers"),
     }
 
 
