@@ -220,11 +220,11 @@ def train_behavior_step(
 ) -> dict[str, float]:
     _amp = amp_context if amp_context is not None else nullcontext()
 
-    # --- Actor update: maximise imagined returns ---
+    # --- 1. Imagine trajectory once (world model frozen) ---
     actor_optimizer.zero_grad(set_to_none=True)
     critic_optimizer.zero_grad(set_to_none=True)
 
-    with _amp, frozen_params(world_model), frozen_params(critic):
+    with _amp, frozen_params(world_model):
         imagined = imagine_trajectory(
             world_model, actor, critic, start_state, horizon,
             longitudinal_scale=longitudinal_scale,
@@ -232,60 +232,36 @@ def train_behavior_step(
             smoothing_factor=smoothing_factor,
             lateral_control=lateral_control,
         )
-        imagined_discounts = (
-            discount * imagined.continues.to(dtype=imagined.rewards.dtype)
-            if imagined.continues is not None
-            else None
-        )
-        actor_returns = td_lambda_returns(
-            imagined.rewards, imagined.values,
-            bootstrap=imagined.bootstrap,
-            discount=discount,
-            lambda_=lambda_,
-            discounts=imagined_discounts,
-        )
-        actor_weights = trajectory_loss_weights(
-            imagined.rewards,
-            discount=discount,
-            discounts=imagined_discounts,
-        )
-        actor_loss = -weighted_mean(actor_returns, actor_weights)
 
+    imagined_discounts = (
+        discount * imagined.continues.to(dtype=imagined.rewards.dtype)
+        if imagined.continues is not None
+        else None
+    )
+
+    returns = td_lambda_returns(
+        imagined.rewards, imagined.values,
+        bootstrap=imagined.bootstrap,
+        discount=discount,
+        lambda_=lambda_,
+        discounts=imagined_discounts,
+    )
+    weights = trajectory_loss_weights(
+        imagined.rewards,
+        discount=discount,
+        discounts=imagined_discounts,
+    )
+
+    # --- 2. Actor update: maximise imagined returns ---
+    with frozen_params(critic):
+        actor_loss = -weighted_mean(returns, weights)
     _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
 
-    # --- Critic update: fit value function to λ-returns ---
-    actor_optimizer.zero_grad(set_to_none=True)
+    # --- 3. Critic update: fit value function to λ-returns ---
     critic_optimizer.zero_grad(set_to_none=True)
-
-    with _amp, frozen_params(world_model), frozen_params(actor):
-        imagined = imagine_trajectory(
-            world_model, actor, critic, start_state, horizon,
-            longitudinal_scale=longitudinal_scale,
-            lateral_scale=lateral_scale,
-            smoothing_factor=smoothing_factor,
-            lateral_control=lateral_control,
-        )
-        imagined_discounts = (
-            discount * imagined.continues.to(dtype=imagined.rewards.dtype)
-            if imagined.continues is not None
-            else None
-        )
-        critic_targets = td_lambda_returns(
-            imagined.rewards, imagined.values,
-            bootstrap=imagined.bootstrap,
-            discount=discount,
-            lambda_=lambda_,
-            discounts=imagined_discounts,
-        ).detach()
-        critic_dist = critic.distribution(imagined.features)
-        critic_log_prob = critic_dist.log_prob(critic_targets)
-        critic_weights = trajectory_loss_weights(
-            imagined.rewards,
-            discount=discount,
-            discounts=imagined_discounts,
-        ).squeeze(-1)
-        critic_loss = -weighted_mean(critic_log_prob, critic_weights)
-
+    critic_dist = critic.distribution(imagined.features.detach())
+    critic_log_prob = critic_dist.log_prob(returns.detach())
+    critic_loss = -weighted_mean(critic_log_prob, weights.squeeze(-1).detach())
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
     return {
