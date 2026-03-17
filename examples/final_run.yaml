@@ -36,9 +36,9 @@ env:
     type: continuous
     longitudinal: true
     lateral: true
-    longitudinal_scale: 0.9
-    lateral_scale: 0.4
-    smoothing_factor: 0.35
+    longitudinal_scale: 0.7
+    lateral_scale: 0.35
+    smoothing_factor: 0.6
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
@@ -51,7 +51,7 @@ env:
     steering_penalty: 0.01
     steering_change_penalty: 0.03
 replay:
-  capacity: 100000
+  capacity: 500000
   sequence_length: 16
   batch_size: 256
 training:
@@ -68,19 +68,15 @@ training:
   free_nats: 3.0
   continue_loss_weight: 1.0
   grad_clip_norm: 100.0
-  lr_warmup_steps: 50
-  use_amp: true
-  amp_dtype: bfloat16
-  use_flash_optimizer: true
-  world_model_updates_per_cycle: 16
-  behavior_updates_per_cycle: 16
+  world_model_updates_per_cycle: 8
+  behavior_updates_per_cycle: 8
   cycles: 2000
-  warm_start_steps: 2000
-  policy_steps: 64
+  warm_start_steps: 10000
+  policy_steps: 32
   checkpoint_interval: 25
 evaluation:
   interval: 25
-  episodes: 3
+  episodes: 10
   max_steps: 200
 model:
   embedding_dim: 1024
