@@ -37,7 +37,7 @@ env:
     offroad_terminal: true
     offroad_penalty: 0.5        # was 3.0; offroad_terminal already kills the episode
     steering_penalty: 0.01      # was 0.05; allow lane changes without heavy cost
-    steering_change_penalty: 0.02  # was 0.1; allow direction changes for passing
+    steering_change_penalty: 0.03  # was 0.1; allow direction changes for passing. Increases it again to discourage zig-zagging; was 0.02.
 replay:
   capacity: 50000
   sequence_length: 16
