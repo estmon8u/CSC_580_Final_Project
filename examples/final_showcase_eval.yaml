@@ -3,15 +3,19 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# H100 + AMP (bfloat16) + FlashAdamW config.
-# Maximises H100 throughput with:
-#   - bf16 automatic mixed precision (native H100 tensor-core dtype)
-#   - FlashAdamW fused optimizer (optional; falls back to AdamW)
-#   - Large batch (256) to saturate GPU memory bandwidth
-#   - 16 model/behavior updates per cycle to keep the GPU busy
-#   - Moderate offroad penalty (0.5) with light steering costs to encourage passing
-#   - DreamerV1-reference model dimensions (1024 embedding, 200+30 latent)
-# Expected runtime: ~45-60 min on Colab H100 for 500 cycles.
+# SHOWCASE EVALUATION CONFIG — Phase B: denser traffic, more lanes.
+#
+# This config is NOT used for training.  After a strong Phase-A checkpoint
+# is produced by final_run.yaml, pass this config to record_demo_videos()
+# so the same trained policy is demoed in a harder, more visually impressive
+# environment:
+#   - 6 lanes (wider road, more overtaking opportunities)
+#   - 45 vehicles (denser traffic, more interactions visible in GIF)
+#   - 60-step episodes (longer to show driving behaviour)
+#
+# The model architecture block is copied from final_run.yaml so the same
+# TinyWorldModel / Actor instances can be rebuilt before weight loading.
+# Only the env block is meaningfully different.
 
 seed: 7
 device: cuda
@@ -20,18 +24,18 @@ env:
   observation_height: 64
   observation_width: 64
   frame_stack: 1
-  max_episode_steps: 40
-  lanes_count: 3
-  vehicles_count: 20
+  max_episode_steps: 60
+  lanes_count: 6
+  vehicles_count: 45
   simulation_frequency: 15
   policy_frequency: 5
   action:
     type: continuous
     longitudinal: true
     lateral: true
-    longitudinal_scale: 0.7
-    lateral_scale: 0.35
-    smoothing_factor: 0.6
+    longitudinal_scale: 0.9
+    lateral_scale: 0.4
+    smoothing_factor: 0.35
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
@@ -67,7 +71,7 @@ training:
   use_flash_optimizer: true
   world_model_updates_per_cycle: 16
   behavior_updates_per_cycle: 16
-  cycles: 500
+  cycles: 2000
   warm_start_steps: 2000
   policy_steps: 64
   checkpoint_interval: 25

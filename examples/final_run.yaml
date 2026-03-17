@@ -3,15 +3,22 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# H100 + AMP (bfloat16) + FlashAdamW config.
-# Maximises H100 throughput with:
-#   - bf16 automatic mixed precision (native H100 tensor-core dtype)
-#   - FlashAdamW fused optimizer (optional; falls back to AdamW)
-#   - Large batch (256) to saturate GPU memory bandwidth
-#   - 16 model/behavior updates per cycle to keep the GPU busy
-#   - Moderate offroad penalty (0.5) with light steering costs to encourage passing
-#   - DreamerV1-reference model dimensions (1024 embedding, 200+30 latent)
-# Expected runtime: ~45-60 min on Colab H100 for 500 cycles.
+# PRIMARY FINAL RUN CONFIG — Phase A: aggressive continuous-control training.
+#
+# Goal: produce a fast, overtaking-capable agent rather than a conservative
+# follower.  Key differences from h100_amp_experiment.yaml:
+#   - 4 lanes (project requirement) with 28 vehicles (moderately hard,
+#     not overwhelming for learning)
+#   - high_speed_reward: 0.5 — strong enough to motivate passing without overpushing
+#   - right_lane_reward: 0.0 — remove lane-hugging bias entirely
+#   - reward_speed_range: [20, 30] — aligned with the working baseline reward scale
+#   - longitudinal_scale: 0.9 (was 0.7) — more throttle authority
+#   - lateral_scale: 0.4 (was 0.35) — slightly more steering range
+#   - smoothing_factor: 0.35 (was 0.6) — faster response, less damping
+#   - lighter steering penalties — assertive passing without twitchiness
+#
+# All H100 AMP training settings are preserved:
+#   bfloat16 AMP, FlashAdamW, batch 256, 16x updates/cycle.
 
 seed: 7
 device: cuda
@@ -20,18 +27,18 @@ env:
   observation_height: 64
   observation_width: 64
   frame_stack: 1
-  max_episode_steps: 40
-  lanes_count: 3
-  vehicles_count: 20
+  max_episode_steps: 50
+  lanes_count: 4
+  vehicles_count: 28
   simulation_frequency: 15
   policy_frequency: 5
   action:
     type: continuous
     longitudinal: true
     lateral: true
-    longitudinal_scale: 0.7
-    lateral_scale: 0.35
-    smoothing_factor: 0.6
+    longitudinal_scale: 0.9
+    lateral_scale: 0.4
+    smoothing_factor: 0.35
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
@@ -67,7 +74,7 @@ training:
   use_flash_optimizer: true
   world_model_updates_per_cycle: 16
   behavior_updates_per_cycle: 16
-  cycles: 500
+  cycles: 2000
   warm_start_steps: 2000
   policy_steps: 64
   checkpoint_interval: 25
