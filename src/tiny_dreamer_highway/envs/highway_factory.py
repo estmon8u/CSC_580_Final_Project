@@ -89,7 +89,8 @@ def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
     return {
         "observation": {
             "type": "GrayscaleObservation",
-            "observation_shape": (config.observation_height, config.observation_width),
+            # upstream GrayscaleObservation interprets this as (width, height)
+            "observation_shape": (config.observation_width, config.observation_height),
             "stack_size": config.frame_stack,
             "weights": [0.2989, 0.5870, 0.1140],
             "scaling": 1.75,
@@ -99,7 +100,8 @@ def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
         "vehicles_count": config.vehicles_count,
         "simulation_frequency": config.simulation_frequency,
         "policy_frequency": config.policy_frequency,
-        "duration": config.max_episode_steps,
+        # upstream duration is in seconds; convert agent steps to seconds
+        "duration": config.max_episode_steps / config.policy_frequency,
         "collision_reward": config.reward.collision_reward,
         "right_lane_reward": config.reward.right_lane_reward,
         "high_speed_reward": config.reward.high_speed_reward,

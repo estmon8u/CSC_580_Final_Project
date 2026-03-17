@@ -270,7 +270,23 @@ def run_training_experiment(
     save_every = config.training.checkpoint_interval if checkpoint_interval is None else checkpoint_interval
 
     artifact_directory = Path(artifact_root)
-    if resume_from is None and artifact_directory.exists():
+
+    # Resolve the resume path early so we can check whether the file
+    # actually exists.  A missing checkpoint is treated as a fresh run:
+    # old artifacts are wiped and training starts from step 1.
+    resolved_resume: Path | None = None
+    if resume_from is not None:
+        candidate = Path(resume_from)
+        if candidate.exists():
+            resolved_resume = candidate
+        else:
+            print(
+                f"[train] checkpoint not found at '{candidate}' — "
+                "starting a fresh run and clearing old artifacts.",
+                flush=True,
+            )
+
+    if resolved_resume is None and artifact_directory.exists():
         shutil.rmtree(artifact_directory)
     checkpoint_dir = artifact_directory / "checkpoints"
     log_dir = artifact_directory / "logs"
@@ -286,9 +302,9 @@ def run_training_experiment(
     ) = initialize_training_state(config)
 
     start_step = 1
-    if resume_from is not None:
+    if resolved_resume is not None:
         metadata = load_checkpoint(
-            resume_from,
+            resolved_resume,
             world_model=world_model,
             actor=actor,
             critic=critic,
@@ -306,7 +322,7 @@ def run_training_experiment(
     critic_scheduler = _make_warmup_scheduler(critic_optimizer, config.training.lr_warmup_steps)
 
     # Restore scheduler state from checkpoint so warmup continues correctly
-    if resume_from is not None:
+    if resolved_resume is not None:
         saved_schedulers = metadata.get("schedulers")
         if saved_schedulers is not None:
             if wm_scheduler is not None and "wm_scheduler" in saved_schedulers:
