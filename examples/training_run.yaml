@@ -29,15 +29,15 @@ env:
     smoothing_factor: 0.6
   reward:
     collision_reward: -1.0
-    right_lane_reward: 0.1
-    high_speed_reward: 0.2
+    right_lane_reward: 0.0      # was 0.1; remove right-lane bias so agent freely passes on the left
+    high_speed_reward: 0.5      # was 0.2; strong speed incentive to motivate overtaking
     lane_change_reward: 0.0
     normalize_reward: true
     reward_speed_range: [20.0, 30.0]
     offroad_terminal: true
-    offroad_penalty: 3.0
-    steering_penalty: 0.05
-    steering_change_penalty: 0.1
+    offroad_penalty: 0.5        # was 3.0; offroad_terminal already kills the episode
+    steering_penalty: 0.01      # was 0.05; allow lane changes without heavy cost
+    steering_change_penalty: 0.02  # was 0.1; allow direction changes for passing
 replay:
   capacity: 50000
   sequence_length: 16
