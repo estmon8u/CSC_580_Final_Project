@@ -13,7 +13,7 @@
 #   - 45 vehicles (denser traffic, more interactions visible in GIF)
 #   - 60-step episodes (longer to show driving behaviour)
 #   - reward terms aligned with the training config so showcase episode
-#     statistics are comparable to Phase A without encouraging extra wobble
+#     statistics are comparable to Phase A after the balanced speed push
 #
 # The model architecture block is copied from final_run.yaml so the same
 # TinyWorldModel / Actor instances can be rebuilt before weight loading.
@@ -41,10 +41,10 @@ env:
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
-    high_speed_reward: 0.7
+    high_speed_reward: 0.8
     lane_change_reward: 0.0
     normalize_reward: true
-    reward_speed_range: [20.0, 35.0]
+    reward_speed_range: [22.0, 35.0]
     offroad_terminal: true
     offroad_penalty: 0.5
     steering_penalty: 0.0075

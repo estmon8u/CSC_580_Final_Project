@@ -111,25 +111,37 @@ def plot_training_history(
     if has_kl:
         world_kl = [float(row.get("world_model/kl_loss", float("nan"))) for row in history]
 
-    figure, axes = plt.subplots(2, 2, figsize=(12, 8), tight_layout=True)
+    figure, axes = plt.subplots(2, 2, figsize=(13, 8), tight_layout=True)
     figure.suptitle(title)
 
-    axes[0, 0].plot(steps, world_total, label="total")
-    axes[0, 0].plot(steps, world_recon, label="reconstruction nll")
+    axes[0, 0].plot(steps, world_total, label="total", color="tab:blue")
+    axes[0, 0].plot(steps, world_recon, label="reconstruction nll", color="tab:orange")
     if not all(value != value for value in world_recon_mse):
-        axes[0, 0].plot(steps, world_recon_mse, label="reconstruction mse", linestyle=":")
-    axes[0, 0].plot(steps, world_reward, label="reward")
+        axes[0, 0].plot(steps, world_recon_mse, label="reconstruction mse", linestyle=":", color="tab:green")
+
+    small_loss_axis = axes[0, 0].twinx()
+    small_loss_axis.plot(steps, world_reward, label="reward", color="tab:red")
     if not all(value != value for value in world_continue):
-        axes[0, 0].plot(steps, world_continue, label="continue", linestyle="-.")
+        small_loss_axis.plot(steps, world_continue, label="continue", linestyle="-.", color="tab:purple")
     if not all(value != value for value in overshooting_kl):
-        axes[0, 0].plot(steps, overshooting_kl, label="overshooting kl", linestyle="--")
+        small_loss_axis.plot(steps, overshooting_kl, label="overshooting kl", linestyle="--", color="tab:brown")
     if not all(value != value for value in overshooting_feature_mse):
-        axes[0, 0].plot(steps, overshooting_feature_mse, label="overshooting feature mse", linestyle=(0, (1, 1)))
+        small_loss_axis.plot(
+            steps,
+            overshooting_feature_mse,
+            label="overshooting feature mse",
+            linestyle=(0, (1, 1)),
+            color="tab:pink",
+        )
     if has_kl:
-        axes[0, 0].plot(steps, world_kl, label="kl", linestyle=":")
+        small_loss_axis.plot(steps, world_kl, label="kl", linestyle=":", color="tab:gray")
     axes[0, 0].set_title("World-model losses")
     axes[0, 0].set_xlabel("Step")
-    axes[0, 0].legend()
+    axes[0, 0].set_ylabel("Large losses")
+    small_loss_axis.set_ylabel("Auxiliary losses")
+    lines, labels = axes[0, 0].get_legend_handles_labels()
+    small_lines, small_labels = small_loss_axis.get_legend_handles_labels()
+    axes[0, 0].legend(lines + small_lines, labels + small_labels, loc="best", fontsize=8)
 
     axes[0, 1].plot(steps, actor_loss, label="actor")
     axes[0, 1].plot(steps, critic_loss, label="critic")
@@ -138,11 +150,18 @@ def plot_training_history(
     axes[0, 1].legend()
 
     axes[1, 0].plot(steps, imagined_reward, label="imagined reward mean", color="tab:green")
+    axes[1, 0].set_ylabel("Imagined reward")
     if not all(value != value for value in eval_reward):
-        axes[1, 0].plot(steps, eval_reward, label="eval mean reward", color="tab:orange")
+        eval_axis = axes[1, 0].twinx()
+        eval_axis.plot(steps, eval_reward, label="eval mean reward", color="tab:orange", linewidth=2.0)
+        eval_axis.set_ylabel("Eval mean reward")
+        reward_lines, reward_labels = axes[1, 0].get_legend_handles_labels()
+        eval_lines, eval_labels = eval_axis.get_legend_handles_labels()
+        axes[1, 0].legend(reward_lines + eval_lines, reward_labels + eval_labels, loc="best")
+    else:
+        axes[1, 0].legend()
     axes[1, 0].set_title("Reward trend")
     axes[1, 0].set_xlabel("Step")
-    axes[1, 0].legend()
 
     axes[1, 1].plot(steps, replay_size, label="replay size", color="tab:purple")
     if not all(value != value for value in eval_crash_rate):
