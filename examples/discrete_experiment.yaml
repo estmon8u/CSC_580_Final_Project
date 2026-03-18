@@ -40,9 +40,9 @@ replay:
   sequence_length: 8
   batch_size: 4
 training:
-  batch_size: 4
+    overtake_reward: 1.5
   imagination_horizon: 5
-  discount: 0.99
+    reward_speed_range: [24.0, 35.0]
   lambda_: 0.95
   overshooting_horizon: 2
   overshooting_kl_weight: 0.5
