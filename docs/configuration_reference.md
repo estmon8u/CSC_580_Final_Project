@@ -181,5 +181,5 @@ A single training cycle executes the following steps in order:
 | Colab production | `training_run.yaml` | 32 | 32 | 500 | off | reference | Real training on T4 GPU |
 | Optimized | `optimized_experiment.yaml` | 32 | 32 | 500 | off | reference | AdamW + grad clip + LR warmup |
 | H100 full | `h100_experiment.yaml` | 128 | 32 | 500 | off | reference | Large-scale GPU run |
-| H100 + AMP | `h100_amp_experiment.yaml` | 256 | 32 | 2000 | bf16 | reference | Maximum H100 throughput with FlashAdamW |
+| H100 + AMP | `h100_amp_experiment.yaml` | 256 | 32 | 2000 | bf16 | reference | Maximum H100 throughput with AMP |
 | H100 screening | `h100_screening_experiment.yaml` | 32 | 32 | 800 | bf16 | reference | Safer screening: 24 WM updates, 4 behavior updates |

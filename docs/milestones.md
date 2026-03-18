@@ -124,7 +124,7 @@ Completed work:
 - probabilistic observation decoder with observation-NLL metrics
 - latent overshooting / multi-step consistency regularization
 - latent rollout consistency evaluation for longer-horizon drift checks
-- AMP (bfloat16) and FlashAdamW support for H100
+- AMP (bfloat16) support for H100
 - 7 Colab notebooks covering smoke tests through H100 screening
 - 6 YAML config profiles (CPU, production, optimized, H100, H100+AMP, screening)
 - full test suite passing
