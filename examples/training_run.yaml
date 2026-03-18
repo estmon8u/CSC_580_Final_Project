@@ -15,9 +15,9 @@ env:
   observation_height: 64
   observation_width: 64
   frame_stack: 1
-  max_episode_steps: 40
+  max_episode_steps: 75
   lanes_count: 4
-  vehicles_count: 20
+  vehicles_count: 28
   simulation_frequency: 15
   policy_frequency: 5
   action:
@@ -40,12 +40,12 @@ env:
     steering_penalty: 0.0075
     steering_change_penalty: 0.02
 replay:
-  capacity: 50000
+  capacity: 500000
   sequence_length: 16
-  batch_size: 32
+  batch_size: 256
 training:
-  batch_size: 32
-  imagination_horizon: 15
+  batch_size: 256
+  imagination_horizon: 20
   discount: 0.99
   lambda_: 0.95
   overshooting_horizon: 3
@@ -59,8 +59,8 @@ training:
   grad_clip_norm: 100.0
   deterministic_torch: true
   lr_warmup_steps: 50
-  world_model_updates_per_cycle: 2
-  behavior_updates_per_cycle: 2
+  world_model_updates_per_cycle: 8
+  behavior_updates_per_cycle: 8
   cycles: 2000
   warm_start_steps: 10000
   policy_steps: 32
