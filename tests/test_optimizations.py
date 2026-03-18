@@ -8,6 +8,7 @@ AI tools consulted: GitHub Copilot
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from tiny_dreamer_highway.config import ExperimentConfig, TrainingConfig

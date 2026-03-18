@@ -8,7 +8,7 @@ def test_load_experiment_config_reads_example() -> None:
     config = load_experiment_config(config_path)
     assert isinstance(config, ExperimentConfig)
     assert config.env.env_id == "highway-v0"
-    assert config.env.reward.offroad_penalty == 3.0
+    assert config.env.reward.offroad_penalty == 0.5
     assert config.replay.sequence_length == 8
     assert config.training.imagination_horizon == 5
     assert config.training.overshooting_horizon == 2
