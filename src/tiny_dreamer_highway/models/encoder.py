@@ -76,7 +76,7 @@ class ObservationEncoder(nn.Module):
         if observations.ndim != 4:
             raise ValueError("observations must have shape (B, C, H, W) or (C, H, W)")
 
-        # Cast to the conv stack's own dtype (fp32 normally, bf16 under AMP/Flash).
+        # Cast to the conv stack's own dtype (fp32 normally, bf16 under AMP).
         _dtype = next(self.conv_stack.parameters()).dtype
         features = observations.to(dtype=_dtype)
         if observations.dtype == torch.uint8:

@@ -41,7 +41,7 @@ All core components are complete:
 - alternating collect/train pipeline
 - checkpoint save/load and metrics export
 - n-step prediction evaluation, plots, videos, submission bundles, and observation-NLL reporting
-- AMP (bfloat16) and FlashAdamW support for H100
+- AMP (bfloat16) support for H100
 - full test suite passing
 
 ## Dreamer integration phases completed

@@ -56,7 +56,6 @@ The initial phase established the reusable Python package, experiment configurat
   - manifest-backed submission bundle export
   - reproducibility seeding
   - AMP (bfloat16/fp16) with autocast and GradScaler
-  - FlashAdamW fused optimizer support
   - combined Colab setup-and-smoke-test notebook
   - 7 Colab notebooks (smoke test, sanity, baseline, H100, optimized, AMP, screening)
   - full test suite passing

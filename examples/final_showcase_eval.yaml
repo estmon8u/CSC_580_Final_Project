@@ -70,7 +70,6 @@ training:
   lr_warmup_steps: 50
   use_amp: true
   amp_dtype: bfloat16
-  use_flash_optimizer: true
   world_model_updates_per_cycle: 16
   behavior_updates_per_cycle: 16
   cycles: 2000

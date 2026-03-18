@@ -165,7 +165,6 @@ Planned work:
 Most engineering and performance optimizations that were previously deferred have been implemented:
 
 - ✅ AMP / autocast (bfloat16 on H100, fp16 with GradScaler on older GPUs)
-- ✅ FlashAdamW fused optimizer
 - ✅ Kaiming weight initialization
 - ✅ Multi-layer networks matching DreamerV1 reference capacity
 - ✅ Configurable model dimensions via `ModelConfig`

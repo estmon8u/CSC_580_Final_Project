@@ -107,42 +107,12 @@ def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], in
     return observation_shape, action_dim
 
 
-def _try_flash_adamw(
-    params,
-    lr: float,
-) -> torch.optim.Optimizer | None:
-    """Try to create a FlashAdamW optimizer (Linux + CUDA only).
-
-    Returns *None* when the package is not installed or the platform
-    is unsupported, so callers can fall back to standard AdamW.
-    """
-    try:
-        from flashoptim import FlashAdamW  # type: ignore[import-untyped]
-        optimizer = FlashAdamW(params, lr=lr)
-        print("[optimizer] using FlashAdamW", flush=True)
-        return optimizer
-    except ImportError:
-        print("[optimizer] flashoptim not installed — falling back to AdamW", flush=True)
-        return None
-    except Exception as exc:  # noqa: BLE001
-        print(f"[optimizer] FlashAdamW failed ({exc!r}) — falling back to AdamW", flush=True)
-        return None
-
-
 def _make_optimizer(
     params,
     lr: float,
-    *,
-    use_flash: bool = False,
 ) -> torch.optim.Optimizer:
-    """Create an optimizer — FlashAdamW when requested and available, else AdamW."""
-    # Materialise the generator so it can survive a failed FlashAdamW attempt.
-    params = list(params)
-    if use_flash:
-        optimizer = _try_flash_adamw(params, lr)
-        if optimizer is not None:
-            return optimizer
-    return torch.optim.AdamW(params, lr=lr)
+    """Create a standard AdamW optimizer."""
+    return torch.optim.AdamW(list(params), lr=lr)
 
 
 def _make_warmup_scheduler(
@@ -172,7 +142,6 @@ def initialize_training_state(
     device = resolve_training_device(config.device)
     if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
-        torch.backends.cudnn.benchmark = True  # fixed image size → autotuner helps
     observation_shape, action_dim = infer_env_shapes(config)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
     mc = config.model
@@ -218,28 +187,12 @@ def initialize_training_state(
         distribution_std=mc.critic_distribution_std,
     ).to(device)
 
-    _flash = config.training.use_flash_optimizer and device.type == "cuda"
-
-    # FlashAdamW requires model weights in half precision — cast when both
-    # AMP *and* flash are requested so the fused optimizer can manage master
-    # weights internally.
-    if _flash and config.training.use_amp:
-        _dtype = resolve_amp_dtype(config.training.amp_dtype)
-        world_model = world_model.to(_dtype)
-        actor = actor.to(_dtype)
-        critic = critic.to(_dtype)
-        print(
-            f"[optimizer] cast models to {config.training.amp_dtype} for FlashAdamW",
-            flush=True,
-        )
-
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,
-        use_flash=_flash,
     )
-    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr, use_flash=_flash)
-    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr, use_flash=_flash)
+    actor_optimizer = _make_optimizer(actor.parameters(), lr=config.training.actor_lr)
+    critic_optimizer = _make_optimizer(critic.parameters(), lr=config.training.critic_lr)
     return (
         replay_buffer,
         world_model,
@@ -262,7 +215,7 @@ def run_training_experiment(
     resume_from: str | Path | None = None,
     show_progress: bool = True,
 ) -> TrainingRunSummary:
-    set_global_seeds(config.seed, deterministic_torch=False)
+    set_global_seeds(config.seed, deterministic_torch=True)
 
     total_cycles = config.training.cycles if cycles is None else cycles
     initial_warm_start_steps = config.training.warm_start_steps if warm_start_steps is None else warm_start_steps

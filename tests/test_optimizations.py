@@ -295,7 +295,6 @@ def test_amp_config_defaults() -> None:
     config = TrainingConfig()
     assert config.use_amp is False
     assert config.amp_dtype == "bfloat16"
-    assert config.use_flash_optimizer is False
 
 
 def test_amp_config_accepts_float16() -> None:
@@ -308,12 +307,10 @@ def test_amp_config_from_dict() -> None:
         "training": {
             "use_amp": True,
             "amp_dtype": "bfloat16",
-            "use_flash_optimizer": True,
         }
     })
     assert config.training.use_amp is True
     assert config.training.amp_dtype == "bfloat16"
-    assert config.training.use_flash_optimizer is True
 
 
 def test_resolve_amp_dtype() -> None:
@@ -366,20 +363,11 @@ def test_behavior_step_accepts_amp_args() -> None:
 
 
 # ---------------------------------------------------------------------------
-# FlashAdamW optional import tests
+# Optimizer tests
 # ---------------------------------------------------------------------------
 
-def test_make_optimizer_returns_adamw_when_flash_unavailable() -> None:
-    """When use_flash=True but flashoptim is not installed, should fall back to AdamW."""
+def test_make_optimizer_returns_adamw() -> None:
     from tiny_dreamer_highway.training.experiment import _make_optimizer
     params = [torch.nn.Parameter(torch.randn(3))]
-    optimizer = _make_optimizer(params, lr=1e-3, use_flash=True)
-    # On Windows/CPU, FlashAdamW is not available — should get AdamW
-    assert isinstance(optimizer, torch.optim.AdamW)
-
-
-def test_make_optimizer_flash_false_returns_adamw() -> None:
-    from tiny_dreamer_highway.training.experiment import _make_optimizer
-    params = [torch.nn.Parameter(torch.randn(3))]
-    optimizer = _make_optimizer(params, lr=1e-3, use_flash=False)
+    optimizer = _make_optimizer(params, lr=1e-3)
     assert isinstance(optimizer, torch.optim.AdamW)

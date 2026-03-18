@@ -20,7 +20,7 @@
 #   - max_episode_steps: 75 — more runway to accelerate after a pass
 #
 # All H100 AMP training settings are preserved:
-#   bfloat16 AMP, FlashAdamW, batch 256, 16x updates/cycle.
+#   bfloat16 AMP, batch 256, 16x updates/cycle.
 
 seed: 7
 device: cuda

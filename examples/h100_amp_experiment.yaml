@@ -3,10 +3,9 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# H100 + AMP (bfloat16) + FlashAdamW config.
+# H100 + AMP (bfloat16) config.
 # Maximises H100 throughput with:
 #   - bf16 automatic mixed precision (native H100 tensor-core dtype)
-#   - FlashAdamW fused optimizer (optional; falls back to AdamW)
 #   - Large batch (256) to saturate GPU memory bandwidth
 #   - 16 model/behavior updates per cycle to keep the GPU busy
 #   - Moderate offroad penalty (0.5) with light steering costs to encourage passing
@@ -64,7 +63,6 @@ training:
   lr_warmup_steps: 50
   use_amp: true
   amp_dtype: bfloat16
-  use_flash_optimizer: true
   world_model_updates_per_cycle: 16
   behavior_updates_per_cycle: 16
   cycles: 2000

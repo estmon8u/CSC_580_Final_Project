@@ -259,9 +259,10 @@ def train_behavior_step(
 
     # --- 3. Critic update: fit value function to λ-returns ---
     critic_optimizer.zero_grad(set_to_none=True)
-    critic_dist = critic.distribution(imagined.features.detach())
-    critic_log_prob = critic_dist.log_prob(returns.detach())
-    critic_loss = -weighted_mean(critic_log_prob, weights.squeeze(-1).detach())
+    with _amp:
+        critic_dist = critic.distribution(imagined.features.detach())
+        critic_log_prob = critic_dist.log_prob(returns.detach())
+        critic_loss = -weighted_mean(critic_log_prob, weights.squeeze(-1).detach())
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
     return {
