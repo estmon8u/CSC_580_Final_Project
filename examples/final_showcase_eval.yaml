@@ -33,9 +33,9 @@ env:
     type: continuous
     longitudinal: true
     lateral: true
-    longitudinal_scale: 0.9
-    lateral_scale: 0.4
-    smoothing_factor: 0.35
+    longitudinal_scale: 0.7
+    lateral_scale: 0.35
+    smoothing_factor: 0.6
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
