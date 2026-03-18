@@ -67,6 +67,7 @@ training:
   free_nats: 3.0
   continue_loss_weight: 1.0
   grad_clip_norm: 100.0
+  deterministic_torch: true
   lr_warmup_steps: 50
   use_amp: true
   amp_dtype: bfloat16

@@ -215,7 +215,7 @@ def run_training_experiment(
     resume_from: str | Path | None = None,
     show_progress: bool = True,
 ) -> TrainingRunSummary:
-    set_global_seeds(config.seed, deterministic_torch=True)
+    set_global_seeds(config.seed, deterministic_torch=config.training.deterministic_torch)
 
     total_cycles = config.training.cycles if cycles is None else cycles
     initial_warm_start_steps = config.training.warm_start_steps if warm_start_steps is None else warm_start_steps
