@@ -20,7 +20,7 @@ env:
   observation_width: 64
   frame_stack: 1
   max_episode_steps: 40
-  lanes_count: 3
+  lanes_count: 4
   vehicles_count: 20
   simulation_frequency: 15
   policy_frequency: 5
@@ -73,7 +73,7 @@ training:
   checkpoint_interval: 25
 evaluation:
   interval: 25
-  episodes: 3
+  episodes: 10
   max_steps: 200
 model:
   embedding_dim: 1024

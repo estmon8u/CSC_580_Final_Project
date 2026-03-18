@@ -16,7 +16,7 @@ env:
   observation_width: 64
   frame_stack: 1
   max_episode_steps: 40
-  lanes_count: 3
+  lanes_count: 4
   vehicles_count: 20
   simulation_frequency: 15
   policy_frequency: 5
@@ -29,16 +29,16 @@ env:
     smoothing_factor: 0.6
   reward:
     collision_reward: -1.0
-    right_lane_reward: 0.0      # was 0.1; remove right-lane bias so agent freely passes on the left
-    high_speed_reward: 0.5      # was 0.2; strong speed incentive to motivate overtaking
+    right_lane_reward: 0.0
+    high_speed_reward: 0.8
     lane_change_reward: 0.0
-    overtake_reward: 1.0       # strong per-car bonus — must outweigh the opportunity cost of trailing
+    overtake_reward: 1.0
     normalize_reward: true
-    reward_speed_range: [20.0, 30.0]
+    reward_speed_range: [22.0, 35.0]
     offroad_terminal: true
-    offroad_penalty: 0.5        # was 3.0; offroad_terminal already kills the episode
-    steering_penalty: 0.01      # was 0.05; allow lane changes without heavy cost
-    steering_change_penalty: 0.03  # was 0.1; allow direction changes for passing. Increases it again to discourage zig-zagging; was 0.02.
+    offroad_penalty: 0.5
+    steering_penalty: 0.0075
+    steering_change_penalty: 0.02
 replay:
   capacity: 50000
   sequence_length: 16
@@ -67,7 +67,7 @@ training:
   checkpoint_interval: 25
 evaluation:
   interval: 25
-  episodes: 3
+  episodes: 10
   max_steps: 200
 model:
   embedding_dim: 1024
