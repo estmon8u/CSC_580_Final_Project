@@ -5,13 +5,21 @@ import pytest
 from tiny_dreamer_highway.config import EnvConfig
 from tiny_dreamer_highway.envs.highway_factory import (
     DrivingPenaltyRewardWrapper,
+    NPCSpeedAdjustmentWrapper,
     build_highway_env_kwargs,
 )
 
 
 class DummyVehicle:
-    def __init__(self, on_road: bool = True) -> None:
+    def __init__(
+        self,
+        on_road: bool = True,
+        speed: float = 25.0,
+        target_speed: float | None = 25.0,
+    ) -> None:
         self.on_road = on_road
+        self.speed = speed
+        self.target_speed = target_speed
 
 
 class DummyEnv(gym.Env):
@@ -22,6 +30,12 @@ class DummyEnv(gym.Env):
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=(4, 4), dtype=np.uint8)
         self.vehicle = DummyVehicle(on_road=on_road)
+        self.road = type("Road", (), {})()
+        self.road.vehicles = [
+            self.vehicle,
+            DummyVehicle(speed=22.0, target_speed=22.0),
+            DummyVehicle(speed=24.0, target_speed=24.0),
+        ]
 
     @property
     def unwrapped(self):
@@ -101,3 +115,20 @@ def test_reward_wrapper_resets_steering_history() -> None:
     _, second_reward, _, _, _ = env.step(np.asarray([0.0, 0.5], dtype=np.float32))
 
     assert first_reward == second_reward == 0.5
+
+
+def test_npc_speed_adjustment_wrapper_slows_only_other_vehicles() -> None:
+    config = EnvConfig(npc_speed_scale=0.96)
+    base_env = DummyEnv(on_road=True)
+    env = NPCSpeedAdjustmentWrapper(base_env, config)
+
+    env.reset(seed=7)
+
+    ego = base_env.vehicle
+    others = [vehicle for vehicle in base_env.road.vehicles if vehicle is not ego]
+    assert ego.speed == 25.0
+    assert ego.target_speed == 25.0
+    assert others[0].speed == pytest.approx(21.12)
+    assert others[0].target_speed == pytest.approx(21.12)
+    assert others[1].speed == pytest.approx(23.04)
+    assert others[1].target_speed == pytest.approx(23.04)

@@ -29,6 +29,7 @@ env:
   max_episode_steps: 60
   lanes_count: 6
   vehicles_count: 45
+  npc_speed_scale: 0.96
   simulation_frequency: 15
   policy_frequency: 5
   action:

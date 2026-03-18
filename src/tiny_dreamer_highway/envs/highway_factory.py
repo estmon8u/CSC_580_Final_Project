@@ -128,6 +128,35 @@ class DrivingPenaltyRewardWrapper(gym.Wrapper):
         return result
 
 
+class NPCSpeedAdjustmentWrapper(gym.Wrapper):
+    def __init__(self, env: gym.Env, config: EnvConfig) -> None:
+        super().__init__(env)
+        self._npc_speed_scale = config.npc_speed_scale
+
+    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
+        observation = self.env.reset(seed=seed, options=options)
+        self._apply_npc_speed_scale()
+        return observation
+
+    def _apply_npc_speed_scale(self) -> None:
+        if self._npc_speed_scale >= 1.0:
+            return
+
+        unwrapped = self.env.unwrapped
+        ego = getattr(unwrapped, "vehicle", None)
+        road = getattr(unwrapped, "road", None)
+        if road is None:
+            return
+
+        for vehicle in getattr(road, "vehicles", []):
+            if vehicle is ego:
+                continue
+            if hasattr(vehicle, "speed"):
+                vehicle.speed = float(vehicle.speed) * self._npc_speed_scale
+            if hasattr(vehicle, "target_speed") and getattr(vehicle, "target_speed") is not None:
+                vehicle.target_speed = float(vehicle.target_speed) * self._npc_speed_scale
+
+
 def _extract_lateral_action(action: Any, config: EnvConfig) -> float:
     if config.action.is_discrete:
         return 0.0
@@ -200,6 +229,8 @@ def make_highway_env(config: EnvConfig):
 
     env = gym.make(config.env_id, render_mode="rgb_array")
     env.unwrapped.configure(build_highway_env_kwargs(config))
+    if config.npc_speed_scale < 1.0:
+        env = NPCSpeedAdjustmentWrapper(env, config)
     if _should_apply_reward_wrapper(config):
         env = DrivingPenaltyRewardWrapper(env, config)
     return env
