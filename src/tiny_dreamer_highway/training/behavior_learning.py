@@ -187,9 +187,8 @@ def trajectory_loss_weights(
     else:
         step_discounts = discounts.to(dtype=rewards.dtype)
 
-    weights = torch.ones_like(rewards)
-    for step in range(1, rewards.shape[0]):
-        weights[step] = weights[step - 1] * step_discounts[step - 1]
+    padded = torch.cat([torch.ones_like(step_discounts[:1]), step_discounts], dim=0)
+    weights = torch.cumprod(padded, dim=0)[:-1]
     return weights.detach()
 
 
@@ -266,8 +265,8 @@ def train_behavior_step(
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
     return {
-        "actor_loss": float(actor_loss.detach().cpu().item()),
-        "critic_loss": float(critic_loss.detach().cpu().item()),
-        "imagined_reward_mean": float(imagined.rewards.detach().mean().cpu().item()),
-        "imagined_value_mean": float(imagined.values.detach().mean().cpu().item()),
+        "actor_loss": float(actor_loss.detach().item()),
+        "critic_loss": float(critic_loss.detach().item()),
+        "imagined_reward_mean": float(imagined.rewards.detach().mean().item()),
+        "imagined_value_mean": float(imagined.values.detach().mean().item()),
     }

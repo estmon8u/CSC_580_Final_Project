@@ -40,6 +40,7 @@ class Critic(nn.Module):
         layers.append(nn.Linear(current_dim, 1))
 
         self.value = nn.Sequential(*layers)
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
         apply_kaiming_init(self)
 
@@ -49,5 +50,5 @@ class Critic(nn.Module):
         return Independent(Normal(mean, std), 1)
 
     def forward(self, latent_features: Tensor) -> Tensor:
-        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         return self.value(latent_features)

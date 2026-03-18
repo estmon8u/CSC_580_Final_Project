@@ -69,6 +69,7 @@ class ObservationEncoder(nn.Module):
         self.conv_output_shape = tuple(conv_output.shape[1:])
         self.conv_output_dim = int(conv_output.reshape(1, -1).shape[-1])
         self.projection = nn.Linear(self.conv_output_dim, embedding_dim)
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
     def encode(self, observations: Tensor) -> Tensor:
         if observations.ndim == 3:
@@ -77,7 +78,7 @@ class ObservationEncoder(nn.Module):
             raise ValueError("observations must have shape (B, C, H, W) or (C, H, W)")
 
         # Cast to the conv stack's own dtype (fp32 normally, bf16 under AMP).
-        _dtype = next(self.conv_stack.parameters()).dtype
+        _dtype = self._dtype_buf.dtype
         features = observations.to(dtype=_dtype)
         if observations.dtype == torch.uint8:
             features = features / 255.0

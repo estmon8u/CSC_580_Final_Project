@@ -55,6 +55,7 @@ class RecurrentStateSpaceModel(nn.Module):
         self.posterior_model = self._build_fc_network(
             deterministic_dim + embedding_dim, hidden_dim, 2 * stochastic_dim, num_layers,
         )
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
     @staticmethod
     def _build_fc_network(
@@ -72,7 +73,7 @@ class RecurrentStateSpaceModel(nn.Module):
 
     @property
     def _dtype(self) -> torch.dtype:
-        return next(self.parameters()).dtype
+        return self._dtype_buf.dtype
 
     def initial_state(self, batch_size: int, device: torch.device | None = None) -> LatentState:
         if batch_size <= 0:

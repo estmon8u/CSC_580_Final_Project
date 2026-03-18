@@ -58,19 +58,20 @@ def evaluate_training_policy(
     steps: list[int] = []
     crashes = 0
     try:
-        for episode_index in range(episodes):
-            episode_seed = None if seed is None else seed + episode_index
-            result = run_policy_episode(
-                config,
-                world_model,
-                actor,
-                max_steps=max_steps,
-                seed=episode_seed,
-                capture_frames=False,
-            )
-            rewards.append(result.total_reward)
-            steps.append(result.steps)
-            crashes += int(result.terminated)
+        with torch.inference_mode():
+            for episode_index in range(episodes):
+                episode_seed = None if seed is None else seed + episode_index
+                result = run_policy_episode(
+                    config,
+                    world_model,
+                    actor,
+                    max_steps=max_steps,
+                    seed=episode_seed,
+                    capture_frames=False,
+                )
+                rewards.append(result.total_reward)
+                steps.append(result.steps)
+                crashes += int(result.terminated)
     finally:
         world_model.train(world_model_was_training)
         actor.train(actor_was_training)

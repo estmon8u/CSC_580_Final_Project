@@ -45,14 +45,11 @@ def append_metrics_csv(log_file: str | Path, record: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(record.keys())
     file_exists = path.exists() and path.stat().st_size > 0
-    existing_rows: list[dict[str, Any]] = []
 
     if file_exists:
-        # Read existing header so we never mismatch columns on resume.
+        # Read only the header line to check if columns need updating.
         with path.open("r", encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle)
-            existing_fields = list(reader.fieldnames or [])
-            existing_rows = list(reader)
+            existing_fields = next(csv.reader(handle), [])
         # Merge: keep existing order, append any new keys at the end.
         merged = list(existing_fields)
         for key in fieldnames:
@@ -61,6 +58,10 @@ def append_metrics_csv(log_file: str | Path, record: dict[str, Any]) -> Path:
         fieldnames = merged
 
         if fieldnames != existing_fields:
+            # New columns appeared — rewrite the file with the updated header.
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                existing_rows = list(reader)
             with path.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
                 writer.writeheader()

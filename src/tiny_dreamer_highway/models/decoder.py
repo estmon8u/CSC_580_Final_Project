@@ -52,6 +52,7 @@ class ObservationDecoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(hidden_channels[3], out_channels, kernel_size=4, stride=2, padding=1),
         )
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
     def distribution(self, latent_features: Tensor) -> Independent:
         mean = self.forward(latent_features)
@@ -59,7 +60,7 @@ class ObservationDecoder(nn.Module):
         return Independent(Normal(mean, std), len(self.output_shape))
 
     def forward(self, latent_features: Tensor) -> Tensor:
-        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         projected = self.projection(latent_features)
         reshaped = projected.reshape(
             latent_features.shape[0],
@@ -125,7 +126,8 @@ class ContinuePredictor(nn.Module):
         layers.append(nn.Linear(current_dim, 1))
 
         self.network = nn.Sequential(*layers)
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
     def forward(self, latent_features: Tensor) -> Tensor:
-        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         return self.network(latent_features)

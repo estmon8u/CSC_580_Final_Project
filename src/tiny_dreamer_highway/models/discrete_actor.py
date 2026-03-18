@@ -50,6 +50,7 @@ class DiscreteActor(nn.Module):
         layers.append(nn.Linear(current_dim, num_actions))
 
         self.net = nn.Sequential(*layers)
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
         apply_kaiming_init(self)
 
@@ -59,7 +60,7 @@ class DiscreteActor(nn.Module):
         Training: Gumbel-Softmax straight-through (differentiable).
         Eval: Hard one-hot from argmax (deterministic).
         """
-        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         logits = self.net(latent_features)
 
         if self.training:

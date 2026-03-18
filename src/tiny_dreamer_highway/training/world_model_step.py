@@ -189,4 +189,4 @@ def train_world_model_step(
         losses["total_loss"], optimizer, model.parameters(),
         grad_clip_norm, grad_scaler,
     )
-    return output, {name: float(value.detach().cpu().item()) for name, value in losses.items()}
+    return output, {name: float(value.detach().item()) for name, value in losses.items()}

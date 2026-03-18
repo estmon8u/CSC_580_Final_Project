@@ -57,8 +57,8 @@ def _average_metric_dicts(metrics_list: list[dict[str, float]]) -> dict[str, flo
     }
 
 
-def _observation_to_tensor(observation: np.ndarray) -> Tensor:
-    observation_tensor = torch.as_tensor(observation)
+def _observation_to_tensor(observation: np.ndarray, device: torch.device | None = None) -> Tensor:
+    observation_tensor = torch.as_tensor(observation, device=device)
     if observation_tensor.ndim == 2:
         observation_tensor = observation_tensor.unsqueeze(0)
     if observation_tensor.ndim == 3:
@@ -153,8 +153,8 @@ def collect_actor_transitions(
             with torch.inference_mode():
                 # 1. Encode current observation → posterior (uses previous action for GRU)
                 observation_tensor = _observation_to_tensor(
-                    np.asarray(observation)
-                ).to(model_device)
+                    np.asarray(observation), device=model_device
+                )
                 posterior = world_model(observation_tensor, prev_action, prev_state=prev_state)
                 prev_state = posterior.posterior_state
 
@@ -163,6 +163,7 @@ def collect_actor_transitions(
                 if is_discrete:
                     # One-hot for RSSM tracking; integer for env.step
                     action_tensor = raw_action_tensor
+                    stored_action = action_tensor.squeeze(0).float().cpu().numpy()
                     env_action = int(raw_action_tensor.squeeze(0).argmax(dim=-1).item())
                 else:
                     action_tensor = stabilize_action_tensor(
@@ -173,13 +174,12 @@ def collect_actor_transitions(
                         smoothing_factor=config.env.action.smoothing_factor,
                         lateral_enabled=config.env.action.lateral,
                     )
-                    env_action = action_tensor.squeeze(0).float().cpu().numpy()
+                    stored_action = action_tensor.squeeze(0).float().cpu().numpy()
+                    env_action = stored_action
                 prev_action = action_tensor
 
             next_observation, reward, terminated, truncated, _ = env.step(env_action)
             done = bool(terminated or truncated)
-            # Store one-hot for discrete, raw for continuous
-            stored_action = action_tensor.squeeze(0).float().cpu().numpy()
             replay_buffer.add(
                 Transition(
                     observation=np.asarray(observation),
@@ -295,15 +295,19 @@ def run_training_cycle(
                 )
             )
 
+    # Pre-concatenate all posterior states once before the behavior update loop
+    if all_posterior_states:
+        all_det = torch.cat([s.deterministic for s in all_posterior_states], dim=0)
+        all_sto = torch.cat([s.stochastic for s in all_posterior_states], dim=0)
+        n_total = all_det.shape[0]
+    else:
+        all_det = all_sto = None
+        n_total = 0
+
     behavior_metrics_list: list[dict[str, float]] = []
     for _ in range(training_config.behavior_updates_per_cycle):
         # Sample start states from collected WM posteriors
-        if all_posterior_states:
-            # Flatten all posteriors: each entry is (B, dim), concatenate across time & batches
-            all_det = torch.cat([s.deterministic for s in all_posterior_states], dim=0)
-            all_sto = torch.cat([s.stochastic for s in all_posterior_states], dim=0)
-            # Random subsample to batch_size
-            n_total = all_det.shape[0]
+        if all_det is not None:
             indices = torch.randint(0, n_total, (batch_size,), device=model_device)
             start_state = LatentState(
                 deterministic=all_det[indices],

@@ -56,11 +56,12 @@ class Actor(nn.Module):
         layers.append(nn.Linear(current_dim, 2 * action_dim))
 
         self.net = nn.Sequential(*layers)
+        self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
         apply_kaiming_init(self)
 
     def forward(self, latent_features: Tensor) -> Tensor:
-        latent_features = latent_features.to(dtype=next(self.parameters()).dtype)
+        latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         raw = self.net(latent_features)
         mean, raw_std = raw.split(self.action_dim, dim=-1)
 
