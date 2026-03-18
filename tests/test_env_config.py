@@ -75,6 +75,7 @@ def test_reward_wrapper_penalizes_unstable_steering_and_offroad() -> None:
             "offroad_penalty": 3.0,
             "steering_penalty": 0.2,
             "steering_change_penalty": 0.3,
+            "normalize_reward": False,
         }
     )
     env = DrivingPenaltyRewardWrapper(DummyEnv(on_road=False), config)
@@ -91,7 +92,7 @@ def test_reward_wrapper_penalizes_unstable_steering_and_offroad() -> None:
 
 
 def test_reward_wrapper_resets_steering_history() -> None:
-    config = EnvConfig(reward={"offroad_penalty": 0.0, "steering_penalty": 0.0, "steering_change_penalty": 1.0})
+    config = EnvConfig(reward={"offroad_penalty": 0.0, "steering_penalty": 0.0, "steering_change_penalty": 1.0, "normalize_reward": False})
     env = DrivingPenaltyRewardWrapper(DummyEnv(on_road=True), config)
     env.reset()
 
