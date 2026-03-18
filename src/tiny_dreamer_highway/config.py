@@ -34,6 +34,7 @@ class RewardConfig(BaseModel):
     right_lane_reward: float = 0.1
     high_speed_reward: float = 0.4
     lane_change_reward: float = 0.0
+    overtake_reward: float = Field(default=0.0, ge=0.0)
     normalize_reward: bool = True
     reward_speed_range: tuple[float, float] = (20.0, 30.0)
     offroad_terminal: bool = True

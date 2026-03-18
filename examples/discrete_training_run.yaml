@@ -29,6 +29,7 @@ env:
     right_lane_reward: 0.0
     high_speed_reward: 0.8
     lane_change_reward: 0.0
+    overtake_reward: 0.0
     normalize_reward: true
     reward_speed_range: [22.0, 35.0]
     offroad_terminal: true

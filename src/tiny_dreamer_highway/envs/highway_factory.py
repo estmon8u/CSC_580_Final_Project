@@ -21,14 +21,37 @@ class DrivingPenaltyRewardWrapper(gym.Wrapper):
         super().__init__(env)
         self._config = config
         self._previous_lateral_action = 0.0
+        self._previous_ahead_vehicles: dict[int, tuple[Any, float]] = {}
+        self._rewarded_overtakes: set[int] = set()
+        # When normalize_reward is True, highway-env maps the raw reward from
+        # [collision_reward, high_speed_reward + right_lane_reward] to [0, 1].
+        # Scale additive shaping terms by the same factor so config values
+        # keep proportional meaning regardless of normalisation.
+        rc = config.reward
+        if rc.normalize_reward:
+            raw_span = (rc.high_speed_reward + rc.right_lane_reward) - rc.collision_reward
+            self._additive_scale = 1.0 / max(raw_span, 1e-8)
+        else:
+            self._additive_scale = 1.0
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
         self._previous_lateral_action = 0.0
-        return self.env.reset(seed=seed, options=options)
+        self._rewarded_overtakes.clear()
+        observation = self.env.reset(seed=seed, options=options)
+        ego_x = self._get_ego_x()
+        all_vehicles = self._snapshot_all_vehicles()
+        self._previous_ahead_vehicles = (
+            {vid: info for vid, info in all_vehicles.items() if info[1] > ego_x}
+            if ego_x is not None
+            else {}
+        )
+        return observation
 
     def step(self, action: Any):
         observation, reward, terminated, truncated, info = self.env.step(action)
-        shaped_reward = float(reward) - self._compute_penalty(action)
+        penalty = self._compute_penalty(action) * self._additive_scale
+        bonus = self._compute_overtake_bonus() * self._additive_scale
+        shaped_reward = float(reward) - penalty + bonus
         return observation, shaped_reward, terminated, truncated, info
 
     def _compute_penalty(self, action: Any) -> float:
@@ -44,6 +67,65 @@ class DrivingPenaltyRewardWrapper(gym.Wrapper):
         if vehicle is not None and not bool(getattr(vehicle, "on_road", True)):
             penalty += penalties.offroad_penalty
         return float(penalty)
+
+    def _compute_overtake_bonus(self) -> float:
+        overtake_reward = self._config.reward.overtake_reward
+        if overtake_reward <= 0.0:
+            self._previous_ahead_vehicles = {}
+            return 0.0
+
+        ego_x = self._get_ego_x()
+        if ego_x is None:
+            self._previous_ahead_vehicles = {}
+            return 0.0
+
+        all_current = self._snapshot_all_vehicles()
+        current_ahead = {
+            vid: info for vid, info in all_current.items() if info[1] > ego_x
+        }
+
+        # A vehicle counts as truly overtaken only when it:
+        # 1. was previously ahead of ego,
+        # 2. still exists on the road (not despawned),
+        # 3. has the same object identity (Python id() not recycled), and
+        # 4. is now behind the ego vehicle.
+        bonus_count = 0
+        for vid, (prev_ref, _) in self._previous_ahead_vehicles.items():
+            if vid in self._rewarded_overtakes:
+                continue
+            if vid not in all_current:
+                continue  # vehicle despawned — not a real overtake
+            curr_ref, curr_x = all_current[vid]
+            if curr_ref is not prev_ref:
+                continue  # Python recycled the id for a different object
+            if curr_x < ego_x:
+                bonus_count += 1
+                self._rewarded_overtakes.add(vid)
+
+        self._previous_ahead_vehicles = current_ahead
+        return float(overtake_reward * bonus_count)
+
+    def _get_ego_x(self) -> float | None:
+        ego = getattr(self.env.unwrapped, "vehicle", None)
+        if ego is None:
+            return None
+        pos = np.asarray(getattr(ego, "position", []), dtype=np.float32).reshape(-1)
+        return float(pos[0]) if pos.size >= 1 else None
+
+    def _snapshot_all_vehicles(self) -> dict[int, tuple[Any, float]]:
+        """Return ``{id(v): (v, x)}`` for every non-ego vehicle on the road."""
+        ego = getattr(self.env.unwrapped, "vehicle", None)
+        road = getattr(self.env.unwrapped, "road", None)
+        if road is None:
+            return {}
+        result: dict[int, tuple[Any, float]] = {}
+        for v in getattr(road, "vehicles", []):
+            if v is ego:
+                continue
+            pos = np.asarray(getattr(v, "position", []), dtype=np.float32).reshape(-1)
+            if pos.size >= 1:
+                result[id(v)] = (v, float(pos[0]))
+        return result
 
 
 def _extract_lateral_action(action: Any, config: EnvConfig) -> float:
@@ -62,7 +144,8 @@ def _should_apply_reward_wrapper(config: EnvConfig) -> bool:
         return False
     reward_config = config.reward
     return (
-        reward_config.offroad_penalty > 0.0
+        reward_config.overtake_reward > 0.0
+        or reward_config.offroad_penalty > 0.0
         or reward_config.steering_penalty > 0.0
         or reward_config.steering_change_penalty > 0.0
     )
