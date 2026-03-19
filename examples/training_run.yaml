@@ -48,14 +48,14 @@ env:
     collision_reward: -1.0
     right_lane_reward: 0.0
     high_speed_reward: 1.5
-    lane_change_reward: 0.1
-    overtake_reward: 5.0
+    lane_change_reward: 0.0           # <-- KILLED: No more reward for weaving
+    overtake_reward: 5.0              # <-- The only way to get big points is passing safely
     normalize_reward: true
     reward_speed_range: [25.0, 35.0]
     offroad_terminal: false
-    offroad_penalty: 0.5
-    steering_penalty: 0.0
-    steering_change_penalty: 0.0
+    offroad_penalty: 1.0              # <-- INCREASED: Make the grass hurt as much as a crash
+    steering_penalty: 0.01            # <-- NEW: Tiny tax for turning the wheel
+    steering_change_penalty: 0.05     # <-- NEW: Moderate tax for jerking the wheel back and forth
 replay:
   capacity: 500000
   sequence_length: 16
