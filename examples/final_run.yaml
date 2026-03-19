@@ -63,7 +63,7 @@ replay:
 training:
   batch_size: 256
   imagination_horizon: 20
-  discount: 0.95
+  discount: 0.97
   lambda_: 0.95
   overshooting_horizon: 5
   overshooting_kl_weight: 0.5
