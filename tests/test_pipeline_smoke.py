@@ -146,6 +146,70 @@ def test_collect_actor_transitions_vectorized(monkeypatch) -> None:
     assert replay_buffer.transitions[0].action.shape == (2,)
 
 
+def test_collect_actor_transitions_vectorized_stores_per_env_contiguously(monkeypatch) -> None:
+    """Verify that vectorized actor collection writes each env's
+    trajectory as a contiguous block, not interleaved across envs."""
+
+    class TaggedFakeVectorEnv:
+        """Each env produces pixel values tagged with env index."""
+
+        def __init__(self, num_envs: int) -> None:
+            self.num_envs = num_envs
+            self._step_count = np.zeros(num_envs, dtype=int)
+
+        def reset(self, seed=None):
+            self._step_count[:] = 0
+            obs = np.zeros((self.num_envs, 1, 64, 64), dtype=np.uint8)
+            obs[0] = 100  # env 0 reset tag
+            obs[1] = 200  # env 1 reset tag
+            return obs, {}
+
+        def step(self, actions):
+            self._step_count += 1
+            obs = np.zeros((self.num_envs, 1, 64, 64), dtype=np.uint8)
+            obs[0] = 10 + self._step_count[0]
+            obs[1] = 20 + self._step_count[1]
+            rewards = np.ones(self.num_envs, dtype=np.float64) * 0.1
+            terminations = np.zeros(self.num_envs, dtype=bool)
+            truncations = np.zeros(self.num_envs, dtype=bool)
+            return obs, rewards, terminations, truncations, {}
+
+        def close(self) -> None:
+            pass
+
+        @property
+        def action_space(self):
+            return _FakeActionSpace()
+
+    config = ExperimentConfig.model_validate({"env": {"num_envs": 2}})
+    replay_buffer = ReplayBuffer(capacity=64)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.make_vectorized_highway_env",
+        lambda env_config: TaggedFakeVectorEnv(num_envs=2),
+    )
+
+    added = collect_actor_transitions(
+        config, replay_buffer, world_model, actor, steps=6, seed=7,
+    )
+    assert added == 6
+    transitions = replay_buffer.transitions
+
+    # First 3 transitions must all be from env 0 (contiguous)
+    assert transitions[0].observation.flat[0] == 100, "env 0 reset obs"
+    assert transitions[1].observation.flat[0] == 11, "env 0 step 1 obs"
+    assert transitions[2].observation.flat[0] == 12, "env 0 step 2 obs"
+    # Last 3 transitions must all be from env 1 (contiguous)
+    assert transitions[3].observation.flat[0] == 200, "env 1 reset obs"
+    assert transitions[4].observation.flat[0] == 21, "env 1 step 1 obs"
+    assert transitions[5].observation.flat[0] == 22, "env 1 step 2 obs"
+
+
 def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monkeypatch) -> None:
     torch.manual_seed(7)
     config = ExperimentConfig()

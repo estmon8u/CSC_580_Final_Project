@@ -241,9 +241,20 @@ def _collect_actor_transitions_vectorized(
 
     prev_state = world_model.rssm.initial_state(batch_size=num_envs, device=model_device)
     prev_action = torch.zeros(num_envs, action_dim, device=model_device)
-    added = 0
 
     iterations = math.ceil(steps / num_envs)
+
+    # Accumulate raw batch arrays per step.  After collection we
+    # stack along axis=1 to get (N, T, ...) and flush each env's
+    # trajectory contiguously via add_batch, avoiding both the
+    # interleaved-layout bug and Python-loop insertion overhead.
+    hist_obs: list[np.ndarray] = []
+    hist_act: list[np.ndarray] = []
+    hist_rew: list[np.ndarray] = []
+    hist_next_obs: list[np.ndarray] = []
+    hist_done: list[np.ndarray] = []
+    hist_term: list[np.ndarray] = []
+    hist_trunc: list[np.ndarray] = []
 
     try:
         for _ in range(iterations):
@@ -288,16 +299,14 @@ def _collect_actor_transitions_vectorized(
                     if final_mask[i] and final_frames[i] is not None:
                         real_next_obs[i] = final_frames[i]
 
-            replay_buffer.add_batch(
-                observations=np.asarray(observations),
-                actions=stored_actions,
-                rewards=rewards.astype(np.float32),
-                next_observations=real_next_obs,
-                dones=dones,
-                terminated=terminations,
-                truncated=truncations,
-            )
-            added += num_envs
+            # Copy observations because SyncVectorEnv may reuse buffers
+            hist_obs.append(np.copy(observations))
+            hist_act.append(stored_actions.copy())
+            hist_rew.append(rewards.astype(np.float32))
+            hist_next_obs.append(real_next_obs)  # already a copy
+            hist_done.append(dones.copy())
+            hist_term.append(terminations.copy())
+            hist_trunc.append(truncations.copy())
 
             observations = next_observations
             prev_action = action_tensor
@@ -313,7 +322,27 @@ def _collect_actor_transitions_vectorized(
     finally:
         vec_env.close()
 
-    return added
+    # Stack & Transpose: (T, N, ...) → (N, T, ...) then flush per-env
+    env_obs = np.stack(hist_obs, axis=1)          # (N, T, ...)
+    env_act = np.stack(hist_act, axis=1)          # (N, T, action_dim)
+    env_rew = np.stack(hist_rew, axis=1)          # (N, T)
+    env_next_obs = np.stack(hist_next_obs, axis=1)
+    env_done = np.stack(hist_done, axis=1)        # (N, T)
+    env_term = np.stack(hist_term, axis=1)
+    env_trunc = np.stack(hist_trunc, axis=1)
+
+    for i in range(num_envs):
+        replay_buffer.add_batch(
+            observations=env_obs[i],
+            actions=env_act[i],
+            rewards=env_rew[i],
+            next_observations=env_next_obs[i],
+            dones=env_done[i],
+            terminated=env_term[i],
+            truncated=env_trunc[i],
+        )
+
+    return num_envs * iterations
 
 
 def run_training_cycle(

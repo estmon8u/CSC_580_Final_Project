@@ -133,3 +133,79 @@ def test_collect_random_transitions_vectorized(monkeypatch: pytest.MonkeyPatch) 
     assert added == 6
     assert len(replay_buffer) == 6
     assert fake_vec_env.closed is True
+
+
+def test_vectorized_collection_stores_per_env_contiguously(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each env's transitions must be stored in a contiguous block.
+
+    With 2 envs and 3 iterations the buffer should look like:
+        [Env0_S1, Env0_S2, Env0_S3, Env1_S1, Env1_S2, Env1_S3]
+    NOT the interleaved layout:
+        [Env0_S1, Env1_S1, Env0_S2, Env1_S2, Env0_S3, Env1_S3]
+    """
+
+    class TaggedVectorEnv:
+        """Each env produces observations tagged with its env index."""
+
+        def __init__(self) -> None:
+            self.num_envs = 2
+            self.action_space = FakeVectorActionSpace()
+            self._step_count = np.zeros(2, dtype=int)
+            self.closed = False
+
+        def reset(self, seed=None):
+            self._step_count[:] = 0
+            # Tag observations: env 0 → pixel value 100, env 1 → 200
+            obs = np.zeros((2, 4, 4), dtype=np.uint8)
+            obs[0] = 100
+            obs[1] = 200
+            return obs, {}
+
+        def step(self, actions):
+            self._step_count += 1
+            # Tag next-obs with env index + step: env 0 → 10+step, env 1 → 20+step
+            obs = np.zeros((2, 4, 4), dtype=np.uint8)
+            obs[0] = 10 + self._step_count[0]
+            obs[1] = 20 + self._step_count[1]
+            rewards = np.array([float(self._step_count[0]), float(self._step_count[1])])
+            terminations = np.zeros(2, dtype=bool)
+            truncations = np.zeros(2, dtype=bool)
+            return obs, rewards, terminations, truncations, {}
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.data.collect_random_rollouts.make_vectorized_highway_env",
+        lambda config: TaggedVectorEnv(),
+    )
+
+    config = EnvConfig(num_envs=2)
+    replay_buffer = ReplayBuffer(capacity=32)
+    added = collect_random_transitions(config, replay_buffer, steps=6, seed=7)
+    assert added == 6
+
+    transitions = replay_buffer.transitions
+    # First 3 belong to env 0, last 3 belong to env 1
+    # Env 0 observations should have pixel value 100 (initial reset)
+    assert transitions[0].observation.flat[0] == 100, (
+        "First block should be env 0's trajectory"
+    )
+    assert transitions[1].observation.flat[0] == 11, (
+        "Second transition should be env 0's second step"
+    )
+    assert transitions[2].observation.flat[0] == 12, (
+        "Third transition should be env 0's third step"
+    )
+    # Env 1 block starts at index 3
+    assert transitions[3].observation.flat[0] == 200, (
+        "Fourth transition should be env 1's first step (reset obs)"
+    )
+    assert transitions[4].observation.flat[0] == 21, (
+        "Fifth transition should be env 1's second step"
+    )
+    assert transitions[5].observation.flat[0] == 22, (
+        "Sixth transition should be env 1's third step"
+    )
