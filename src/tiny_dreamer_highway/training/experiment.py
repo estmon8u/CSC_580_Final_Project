@@ -188,6 +188,21 @@ def initialize_training_state(
         distribution_std=mc.critic_distribution_std,
     ).to(device)
 
+    # ── torch.compile: fuse GPU kernels for CNNs and MLPs ────────────
+    # We specifically compile the inner nn.Sequential blocks rather than
+    # the entire modules. This prevents PyTorch Dynamo from suffering
+    # "graph breaks" on Python-heavy logic like tensor reshaping,
+    # explicit dtype casting, and custom Dataclasses (LatentState).
+    if device.type == "cuda" and hasattr(torch, "compile"):
+        world_model.encoder.conv_stack = torch.compile(world_model.encoder.conv_stack)
+        world_model.decoder.decoder = torch.compile(world_model.decoder.decoder)
+
+        # Safely check for the sequential attributes before compiling
+        if hasattr(actor, "net"):
+            actor.net = torch.compile(actor.net)
+        if hasattr(critic, "value"):
+            critic.value = torch.compile(critic.value)
+
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
         lr=config.training.world_model_lr,

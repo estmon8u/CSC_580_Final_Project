@@ -81,6 +81,71 @@ def test_collect_actor_transitions_adds_policy_steps(monkeypatch) -> None:
     assert replay_buffer.transitions[0].action.shape == (2,)
 
 
+class _FakeVectorEnv:
+    """Mimics the gymnasium.vector.SyncVectorEnv API for testing."""
+
+    def __init__(self, num_envs: int) -> None:
+        self.num_envs = num_envs
+        self._step_count = np.zeros(num_envs, dtype=int)
+
+    def reset(self, seed=None):
+        self._step_count[:] = 0
+        observations = np.full((self.num_envs, 1, 64, 64), 3, dtype=np.uint8)
+        return observations, {}
+
+    def step(self, actions):
+        self._step_count += 1
+        observations = np.full((self.num_envs, 1, 64, 64), 5, dtype=np.uint8)
+        rewards = np.ones(self.num_envs, dtype=np.float64) * 0.1
+        # Terminate envs where step_count >= 3
+        terminations = self._step_count >= 3
+        truncations = np.zeros(self.num_envs, dtype=bool)
+
+        infos: dict = {}
+        if terminations.any():
+            infos["_final_observation"] = terminations.copy()
+            final_obs = [None] * self.num_envs
+            for i in range(self.num_envs):
+                if terminations[i]:
+                    final_obs[i] = np.full((1, 64, 64), 99, dtype=np.uint8)
+            infos["final_observation"] = final_obs
+            # Auto-reset: set step counter to 0 for done envs
+            self._step_count[terminations] = 0
+
+        return observations, rewards, terminations, truncations, infos
+
+    def close(self) -> None:
+        pass
+
+    @property
+    def action_space(self):
+        return _FakeActionSpace()
+
+
+def test_collect_actor_transitions_vectorized(monkeypatch) -> None:
+    config = ExperimentConfig.model_validate({"env": {"num_envs": 2}})
+    replay_buffer = ReplayBuffer(capacity=64)
+    world_model = TinyWorldModel(
+        observation_shape=(1, 64, 64), action_dim=2,
+        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+    )
+    actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
+
+    monkeypatch.setattr(
+        "tiny_dreamer_highway.training.pipeline.make_vectorized_highway_env",
+        lambda env_config: _FakeVectorEnv(num_envs=2),
+    )
+
+    added = collect_actor_transitions(
+        config, replay_buffer, world_model, actor, steps=6, seed=7,
+    )
+
+    # ceil(6 / 2) = 3 iterations × 2 envs = 6 transitions
+    assert added == 6
+    assert len(replay_buffer) == 6
+    assert replay_buffer.transitions[0].action.shape == (2,)
+
+
 def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monkeypatch) -> None:
     torch.manual_seed(7)
     config = ExperimentConfig()

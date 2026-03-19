@@ -72,20 +72,26 @@ class ObservationEncoder(nn.Module):
         self.register_buffer('_dtype_buf', torch.zeros(1), persistent=False)
 
     def encode(self, observations: Tensor) -> Tensor:
+        if observations.ndim not in (3, 4, 5):
+            raise ValueError("observations must have shape (B, T, C, H, W), (B, C, H, W) or (C, H, W)")
         if observations.ndim == 3:
             observations = observations.unsqueeze(0)
-        if observations.ndim != 4:
-            raise ValueError("observations must have shape (B, C, H, W) or (C, H, W)")
 
-        # Cast to the conv stack's own dtype (fp32 normally, bf16 under AMP).
+        # Flatten Time into Batch: (B, T, C, H, W) -> (B*T, C, H, W)
+        batch_shape = observations.shape[:-3]
+        flat_obs = observations.reshape(-1, *observations.shape[-3:])
+
         _dtype = self._dtype_buf.dtype
-        features = observations.to(dtype=_dtype)
+        features = flat_obs.to(dtype=_dtype)
         if observations.dtype == torch.uint8:
             features = features / 255.0
 
         encoded = self.conv_stack(features)
         flattened = encoded.reshape(encoded.shape[0], -1)
-        return self.projection(flattened)
+        projected = self.projection(flattened)
+
+        # Unflatten back to (B, T, Embedding_Dim)
+        return projected.reshape(*batch_shape, self.embedding_dim)
 
     def forward(self, observations: Tensor) -> LatentState:
         return LatentState(embedding=self.encode(observations))

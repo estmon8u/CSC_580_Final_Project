@@ -19,7 +19,7 @@ from torch import Tensor, optim
 from tiny_dreamer_highway.config import ExperimentConfig, TrainingConfig
 from tiny_dreamer_highway.data.collect_random_rollouts import collect_random_transitions
 from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
-from tiny_dreamer_highway.envs.highway_factory import make_highway_env
+from tiny_dreamer_highway.envs.highway_factory import make_highway_env, make_vectorized_highway_env
 from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Critic
 from tiny_dreamer_highway.models.discrete_actor import DiscreteActor
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
@@ -137,6 +137,25 @@ def collect_actor_transitions(
     if steps <= 0:
         return 0
 
+    num_envs = config.env.num_envs
+    if num_envs > 1:
+        return _collect_actor_transitions_vectorized(
+            config, replay_buffer, world_model, actor, steps, seed, num_envs,
+        )
+    return _collect_actor_transitions_single(
+        config, replay_buffer, world_model, actor, steps, seed,
+    )
+
+
+def _collect_actor_transitions_single(
+    config: ExperimentConfig,
+    replay_buffer: ReplayBuffer,
+    world_model: TinyWorldModel,
+    actor: Actor | DiscreteActor,
+    steps: int,
+    seed: int | None = None,
+) -> int:
+    """Original single-env collection path (num_envs == 1)."""
     is_discrete = config.env.action.is_discrete
     env = make_highway_env(config.env)
     if seed is not None and hasattr(env.action_space, "seed"):
@@ -151,17 +170,14 @@ def collect_actor_transitions(
     try:
         for _ in range(steps):
             with torch.inference_mode():
-                # 1. Encode current observation → posterior (uses previous action for GRU)
                 observation_tensor = _observation_to_tensor(
                     np.asarray(observation), device=model_device
                 )
                 posterior = world_model(observation_tensor, prev_action, prev_state=prev_state)
                 prev_state = posterior.posterior_state
 
-                # 2. Select action based on the posterior that sees current obs
                 raw_action_tensor = actor(prev_state.features)
                 if is_discrete:
-                    # One-hot for RSSM tracking; integer for env.step
                     action_tensor = raw_action_tensor
                     stored_action = action_tensor.squeeze(0).float().cpu().numpy()
                     env_action = int(raw_action_tensor.squeeze(0).argmax(dim=-1).item())
@@ -200,6 +216,102 @@ def collect_actor_transitions(
                 prev_action = torch.zeros(1, action_dim, device=model_device)
     finally:
         env.close()
+
+    return added
+
+
+def _collect_actor_transitions_vectorized(
+    config: ExperimentConfig,
+    replay_buffer: ReplayBuffer,
+    world_model: TinyWorldModel,
+    actor: Actor | DiscreteActor,
+    steps: int,
+    seed: int | None,
+    num_envs: int,
+) -> int:
+    """Vectorized collection: N envs step in parallel via SyncVectorEnv."""
+    import math
+
+    is_discrete = config.env.action.is_discrete
+    model_device = _module_device(world_model)
+    action_dim = world_model.rssm.action_dim
+
+    vec_env = make_vectorized_highway_env(config.env)
+    observations, _ = vec_env.reset(seed=seed)
+
+    prev_state = world_model.rssm.initial_state(batch_size=num_envs, device=model_device)
+    prev_action = torch.zeros(num_envs, action_dim, device=model_device)
+    added = 0
+
+    iterations = math.ceil(steps / num_envs)
+
+    try:
+        for _ in range(iterations):
+            with torch.inference_mode():
+                obs_tensor = torch.from_numpy(np.asarray(observations)).to(
+                    device=model_device, non_blocking=True
+                )
+                # observations from SyncVectorEnv are (N, H, W) or (N, C, H, W)
+                if obs_tensor.ndim == 3:
+                    obs_tensor = obs_tensor.unsqueeze(1)  # → (N, 1, H, W)
+
+                posterior = world_model(obs_tensor, prev_action, prev_state=prev_state)
+                current_state = posterior.posterior_state
+
+                raw_action_tensor = actor(current_state.features)
+
+                if is_discrete:
+                    action_tensor = raw_action_tensor
+                    stored_actions = action_tensor.float().cpu().numpy()
+                    env_actions = raw_action_tensor.argmax(dim=-1).cpu().numpy()
+                else:
+                    action_tensor = stabilize_action_tensor(
+                        raw_action_tensor,
+                        previous_action=prev_action,
+                        longitudinal_scale=config.env.action.longitudinal_scale,
+                        lateral_scale=config.env.action.lateral_scale,
+                        smoothing_factor=config.env.action.smoothing_factor,
+                        lateral_enabled=config.env.action.lateral,
+                    )
+                    stored_actions = action_tensor.float().cpu().numpy()
+                    env_actions = stored_actions
+
+            next_observations, rewards, terminations, truncations, infos = vec_env.step(env_actions)
+            dones = terminations | truncations
+
+            # Intercept Gymnasium's auto-reset to get the true terminal frames
+            real_next_obs = np.copy(next_observations)
+            if "_final_observation" in infos and "final_observation" in infos:
+                final_mask = infos["_final_observation"]
+                final_frames = infos["final_observation"]
+                for i in range(num_envs):
+                    if final_mask[i] and final_frames[i] is not None:
+                        real_next_obs[i] = final_frames[i]
+
+            replay_buffer.add_batch(
+                observations=np.asarray(observations),
+                actions=stored_actions,
+                rewards=rewards.astype(np.float32),
+                next_observations=real_next_obs,
+                dones=dones,
+                terminated=terminations,
+                truncated=truncations,
+            )
+            added += num_envs
+
+            observations = next_observations
+            prev_action = action_tensor
+            prev_state = current_state
+
+            # Reset RSSM state for done envs using torch.where
+            if dones.any():
+                done_mask = torch.tensor(dones, device=model_device, dtype=torch.bool).unsqueeze(-1)
+                init_state = world_model.rssm.initial_state(batch_size=num_envs, device=model_device)
+                prev_action = torch.where(done_mask, torch.zeros_like(prev_action), prev_action)
+                prev_state.deterministic = torch.where(done_mask, init_state.deterministic, prev_state.deterministic)
+                prev_state.stochastic = torch.where(done_mask, init_state.stochastic, prev_state.stochastic)
+    finally:
+        vec_env.close()
 
     return added
 
@@ -265,9 +377,10 @@ def run_training_cycle(
         # deterministic state with the supplied action *before* conditioning on
         # the observation embedding, so the observation paired with action_t
         # must be the post-action observation = next_obs_t.
-        observations = torch.as_tensor(seq_batch.next_observations, device=model_device)
-        actions = torch.as_tensor(seq_batch.actions, dtype=torch.float32, device=model_device)
-        rewards = torch.as_tensor(seq_batch.rewards, dtype=torch.float32, device=model_device)
+        # non_blocking=True lets the PCIe transfer overlap with Python work
+        observations = torch.from_numpy(seq_batch.next_observations).to(device=model_device, non_blocking=True)
+        actions = torch.from_numpy(seq_batch.actions).to(dtype=torch.float32, device=model_device, non_blocking=True)
+        rewards = torch.from_numpy(seq_batch.rewards).to(dtype=torch.float32, device=model_device, non_blocking=True)
 
         outputs, world_model_metrics = train_sequence_world_model_step(
             world_model,
@@ -275,7 +388,7 @@ def run_training_cycle(
             observations,
             actions,
             rewards,
-            terminals=torch.as_tensor(seq_batch.terminals, dtype=torch.float32, device=model_device),
+            terminals=torch.from_numpy(seq_batch.terminals).to(dtype=torch.float32, device=model_device, non_blocking=True),
             kl_weight=training_config.kl_weight,
             free_nats=training_config.free_nats,
             continue_loss_weight=training_config.continue_loss_weight,
@@ -316,8 +429,8 @@ def run_training_cycle(
         else:
             # Fallback: seed from replay buffer (same post-action alignment)
             batch = replay_buffer.sample_batch(batch_size=batch_size)
-            observations = torch.as_tensor(batch.next_observations, device=model_device)
-            actions = torch.as_tensor(batch.actions, dtype=torch.float32, device=model_device)
+            observations = torch.from_numpy(batch.next_observations).to(device=model_device, non_blocking=True)
+            actions = torch.from_numpy(batch.actions).to(dtype=torch.float32, device=model_device, non_blocking=True)
             start_state = seed_latent_state(world_model, observations, actions, amp_context=amp_context)
         behavior_metrics = train_behavior_step(
             world_model,

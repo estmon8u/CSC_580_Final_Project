@@ -127,6 +127,65 @@ class ReplayBuffer:
         # Invalidate cached sequence-start indices
         self._valid_starts_cache.clear()
 
+    def add_batch(
+        self,
+        observations: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_observations: np.ndarray,
+        dones: np.ndarray,
+        terminated: np.ndarray,
+        truncated: np.ndarray,
+    ) -> None:
+        """Add *N* transitions in one vectorised write."""
+        batch_size = observations.shape[0]
+        if batch_size == 0:
+            return
+        if batch_size > self.capacity:
+            raise ValueError("Cannot add a batch larger than the replay buffer capacity")
+
+        if self._obs is None:
+            self._allocate(
+                observations.shape[1:],
+                actions.shape[1:],
+                obs_dtype=observations.dtype,
+            )
+
+        end_idx = self._position + batch_size
+        if end_idx <= self.capacity:
+            # Fits without wrapping — contiguous memcpy
+            self._obs[self._position : end_idx] = observations
+            self._act[self._position : end_idx] = actions
+            self._rew[self._position : end_idx] = rewards
+            self._next_obs[self._position : end_idx] = next_observations
+            self._dones[self._position : end_idx] = dones
+            self._terminated[self._position : end_idx] = terminated
+            self._truncated[self._position : end_idx] = truncated
+        else:
+            # Wraps around — split into two contiguous chunks
+            first_part = self.capacity - self._position
+            second_part = batch_size - first_part
+
+            self._obs[self._position :] = observations[:first_part]
+            self._act[self._position :] = actions[:first_part]
+            self._rew[self._position :] = rewards[:first_part]
+            self._next_obs[self._position :] = next_observations[:first_part]
+            self._dones[self._position :] = dones[:first_part]
+            self._terminated[self._position :] = terminated[:first_part]
+            self._truncated[self._position :] = truncated[:first_part]
+
+            self._obs[:second_part] = observations[first_part:]
+            self._act[:second_part] = actions[first_part:]
+            self._rew[:second_part] = rewards[first_part:]
+            self._next_obs[:second_part] = next_observations[first_part:]
+            self._dones[:second_part] = dones[first_part:]
+            self._terminated[:second_part] = terminated[first_part:]
+            self._truncated[:second_part] = truncated[first_part:]
+
+        self._position = end_idx % self.capacity
+        self._size = min(self.capacity, self._size + batch_size)
+        self._valid_starts_cache.clear()
+
     # ------------------------------------------------------------------
     # Backward-compatible property (test / debug only)
     # ------------------------------------------------------------------

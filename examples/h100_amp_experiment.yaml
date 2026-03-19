@@ -25,6 +25,7 @@ env:
   npc_speed_scale: 0.96
   simulation_frequency: 15
   policy_frequency: 5
+  num_envs: 4
   action:
     type: continuous
     longitudinal: true
@@ -53,8 +54,8 @@ training:
   imagination_horizon: 20
   discount: 0.99
   lambda_: 0.95
-  overshooting_horizon: 5
-  overshooting_kl_weight: 0.5
+  overshooting_horizon: 0
+  overshooting_kl_weight: 0.0
   world_model_lr: 0.0003
   actor_lr: 0.00008
   critic_lr: 0.00008

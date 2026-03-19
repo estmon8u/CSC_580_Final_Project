@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 
+import math
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor, optim
 
 from tiny_dreamer_highway.models.encoder import LatentState
@@ -22,6 +24,91 @@ from tiny_dreamer_highway.training.world_model_step import (
     gaussian_kl_divergence,
 )
 from tiny_dreamer_highway.types import ReplaySequenceBatch, Transition
+
+
+def _compute_vectorized_losses(
+    observations: Tensor,
+    rewards: Tensor,
+    reconstructions: Tensor,
+    predicted_rewards: Tensor,
+    predicted_continues: Tensor | None,
+    post_means: Tensor,
+    post_stds: Tensor,
+    prior_means: Tensor,
+    prior_stds: Tensor,
+    *,
+    terminal_targets: Tensor | None,
+    free_nats: float,
+    continue_loss_weight: float,
+    observation_std: float,
+    reward_std: float,
+) -> dict[str, Tensor]:
+    """Compute all world-model losses in one vectorized pass.
+
+    Accepts pre-stacked (B, T, ...) tensors directly to avoid Python overhead.
+    """
+    B, T = observations.shape[:2]
+    device = observations.device
+
+    # ── Target preparation ───────────────────────────────────────────
+    target_obs = observations.to(dtype=reconstructions.dtype)
+    if observations.dtype == torch.uint8:
+        target_obs = target_obs / 255.0
+    target_rew = rewards.unsqueeze(-1).to(dtype=predicted_rewards.dtype)  # (B, T, 1)
+
+    # ── Reconstruction loss (Gaussian log-prob) ──────────────────────
+    recon_var = observation_std ** 2
+    recon_sq_err = (reconstructions - target_obs).pow(2)
+    reconstruction_mse = recon_sq_err.mean()
+
+    event_dims = reconstructions.shape[2:]  # (C, H, W)
+    d = 1
+    for s in event_dims:
+        d *= s
+
+    log_prob_per_sample = -0.5 * (
+        d * math.log(2 * math.pi)
+        + d * math.log(recon_var)
+        + recon_sq_err.reshape(B, T, -1).sum(dim=-1) / recon_var
+    )  # (B, T)
+    observation_log_prob = log_prob_per_sample.mean()
+    reconstruction_loss = -observation_log_prob
+
+    # ── Reward loss (Gaussian log-prob) ──────────────────────────────
+    rew_sq_err = (predicted_rewards - target_rew).pow(2)
+    rew_var = reward_std ** 2
+    rew_log_prob = -0.5 * (
+        math.log(2 * math.pi) + math.log(rew_var) + rew_sq_err.squeeze(-1) / rew_var
+    )  # (B, T)
+    reward_loss = -rew_log_prob.mean()
+
+    # ── Continue loss (BCE) ──────────────────────────────────────────
+    continue_loss = torch.zeros((), device=device, dtype=reconstructions.dtype)
+    if terminal_targets is not None and predicted_continues is not None:
+        continue_targets = (
+            1.0 - terminal_targets.unsqueeze(-1).to(dtype=predicted_continues.dtype)
+        )  # (B, T, 1)
+        continue_loss = F.binary_cross_entropy_with_logits(
+            predicted_continues, continue_targets,
+        )
+
+    # ── KL divergence (analytic Gaussian KL) ─────────────────────────
+    var_ratio = (post_stds / prior_stds).pow(2)
+    mean_diff = ((prior_means - post_means) / prior_stds).pow(2)
+    kl_per_dim = 0.5 * (var_ratio + mean_diff - 1.0 - var_ratio.log())
+
+    raw_kl = kl_per_dim.sum(dim=-1).mean()
+    kl_loss = torch.clamp(raw_kl, min=free_nats)
+
+    return {
+        "reconstruction_loss": reconstruction_loss,
+        "reconstruction_mse": reconstruction_mse,
+        "observation_log_prob": observation_log_prob,
+        "reward_loss": reward_loss,
+        "continue_loss": continue_loss,
+        "kl_loss": kl_loss,
+        "kl_loss_raw": raw_kl.detach(),
+    }
 
 
 def compute_latent_overshooting_losses(
@@ -150,71 +237,93 @@ def compute_sequence_world_model_losses(
         raise ValueError("rewards must have shape (B, T)")
 
     terminal_targets = terminals if terminals is not None else dones
-
     batch_size, sequence_length = observations.shape[:2]
-    state: LatentState | None = None
-    outputs: list[WorldModelOutput] = []
-    reconstruction_loss = torch.zeros((), device=observations.device)
-    reconstruction_mse = torch.zeros((), device=observations.device)
-    observation_log_prob = torch.zeros((), device=observations.device)
-    reward_loss = torch.zeros((), device=observations.device)
-    continue_loss = torch.zeros((), device=observations.device)
-    kl_loss = torch.zeros((), device=observations.device)
-    kl_loss_raw = torch.zeros((), device=observations.device)
+
+    # ── 1. Vectorized ENCODER ─────────────────────────────────────────
+    embeddings = model.encoder.encode(observations)
+
+    # ── 2. Recurrent RSSM Loop ────────────────────────────────────────
+    prior_states: list[LatentState] = []
+    posterior_states: list[LatentState] = []
+    state = model.rssm.initial_state(batch_size, observations.device)
 
     for step in range(sequence_length):
-        output = model(observations[:, step], actions[:, step], prev_state=state)
-        step_losses = compute_world_model_losses(
-            output,
-            observations[:, step],
-            rewards[:, step],
-            target_terminals=None if terminal_targets is None else terminal_targets[:, step],
-            kl_weight=1.0, free_nats=free_nats,
-            continue_loss_weight=continue_loss_weight,
-        )
-        reconstruction_loss = reconstruction_loss + step_losses["reconstruction_loss"]
-        reconstruction_mse = reconstruction_mse + step_losses["reconstruction_mse"]
-        observation_log_prob = observation_log_prob + step_losses["observation_log_prob"]
-        reward_loss = reward_loss + step_losses["reward_loss"]
-        continue_loss = continue_loss + step_losses["continue_loss"]
-        kl_loss = kl_loss + step_losses["kl_loss"]
-        kl_loss_raw = kl_loss_raw + step_losses["kl_loss_raw"]
-        outputs.append(output)
-        state = output.posterior_state
+        prior = model.rssm.imagine_step(state, actions[:, step])
+        state = model.rssm.observe_step(state, actions[:, step], embeddings[:, step])
+        prior_states.append(prior)
+        posterior_states.append(state)
 
-    reconstruction_loss = reconstruction_loss / sequence_length
-    reconstruction_mse = reconstruction_mse / sequence_length
-    observation_log_prob = observation_log_prob / sequence_length
-    reward_loss = reward_loss / sequence_length
-    continue_loss = continue_loss / sequence_length
-    kl_loss = kl_loss / sequence_length
-    kl_loss_raw = kl_loss_raw / sequence_length
-    overshooting_losses = compute_latent_overshooting_losses(
-        model,
-        outputs,
-        actions,
-        overshooting_horizon=overshooting_horizon,
+    # ── 3. Vectorized DECODER & REWARD ────────────────────────────────
+    # Stack features to compute all time steps in one GPU kernel
+    features = torch.stack([s.features for s in posterior_states], dim=1)
+
+    reconstructions = model.decoder(features)                 # (B, T, C, H, W)
+    predicted_rewards = model.reward_predictor(features)      # (B, T, 1)
+    predicted_continues = (
+        model.continue_predictor(features) if model.continue_predictor is not None else None
     )
+
+    # ── 4. Extract Stacked Distributions for Loss ─────────────────────
+    post_means = torch.stack([s.dist_mean for s in posterior_states], dim=1)
+    post_stds = torch.stack([s.dist_std for s in posterior_states], dim=1)
+    prior_means = torch.stack([s.dist_mean for s in prior_states], dim=1)
+    prior_stds = torch.stack([s.dist_std for s in prior_states], dim=1)
+
+    # ── 5. Safe, Explicit Vectorized Loss Math (No Re-stacking) ───────
+    losses = _compute_vectorized_losses(
+        observations=observations,
+        rewards=rewards,
+        reconstructions=reconstructions,
+        predicted_rewards=predicted_rewards,
+        predicted_continues=predicted_continues,
+        post_means=post_means,
+        post_stds=post_stds,
+        prior_means=prior_means,
+        prior_stds=prior_stds,
+        terminal_targets=terminal_targets,
+        free_nats=free_nats,
+        continue_loss_weight=continue_loss_weight,
+        observation_std=(1.0 if model.decoder.distribution_std is None else model.decoder.distribution_std),
+        reward_std=(1.0 if model.reward_predictor.distribution_std is None else model.reward_predictor.distribution_std),
+    )
+
+    # ── 6. Reconstruct list[WorldModelOutput] to preserve API ─────────
+    outputs: list[WorldModelOutput] = []
+    for t in range(sequence_length):
+        outputs.append(
+            WorldModelOutput(
+                embedding=embeddings[:, t],
+                prior_state=prior_states[t],
+                posterior_state=posterior_states[t],
+                reconstruction=reconstructions[:, t],
+                predicted_reward=predicted_rewards[:, t],
+                predicted_observation_std=model.decoder.distribution_std,
+                predicted_reward_std=model.reward_predictor.distribution_std,
+                predicted_continue=predicted_continues[:, t] if predicted_continues is not None else None,
+            )
+        )
+
+    # ── 7. Add Overshooting (Optional) ────────────────────────────────
+    overshooting_losses = compute_latent_overshooting_losses(
+        model, outputs, actions, overshooting_horizon=overshooting_horizon,
+    )
+
     total_loss = (
-        reconstruction_loss
-        + reward_loss
-        + kl_weight * kl_loss
-        + continue_loss_weight * continue_loss
+        losses["reconstruction_loss"]
+        + losses["reward_loss"]
+        + kl_weight * losses["kl_loss"]
+        + continue_loss_weight * losses["continue_loss"]
         + overshooting_kl_weight * overshooting_losses["overshooting_kl_loss"]
     )
-    return outputs, {
-        "reconstruction_loss": reconstruction_loss,
-        "reconstruction_mse": reconstruction_mse,
-        "observation_log_prob": observation_log_prob,
-        "reward_loss": reward_loss,
-        "continue_loss": continue_loss,
-        "kl_loss": kl_loss,
-        "kl_loss_raw": kl_loss_raw.detach(),
+
+    losses.update({
         "overshooting_kl_loss": overshooting_losses["overshooting_kl_loss"],
         "overshooting_feature_mse": overshooting_losses["overshooting_feature_mse"],
         "overshooting_pairs": overshooting_losses["overshooting_pairs"],
         "total_loss": total_loss,
-    }
+    })
+
+    return outputs, losses
 
 
 def train_sequence_world_model_step(

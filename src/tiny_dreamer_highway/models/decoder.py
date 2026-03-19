@@ -61,14 +61,22 @@ class ObservationDecoder(nn.Module):
 
     def forward(self, latent_features: Tensor) -> Tensor:
         latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
-        projected = self.projection(latent_features)
+
+        # Flatten Time into Batch: (B, T, Latent_Dim) -> (B*T, Latent_Dim)
+        batch_shape = latent_features.shape[:-1]
+        flat_features = latent_features.reshape(-1, latent_features.shape[-1])
+
+        projected = self.projection(flat_features)
         reshaped = projected.reshape(
-            latent_features.shape[0],
+            -1,
             self.base_channels,
             self.base_height,
             self.base_width,
         )
-        return self.decoder(reshaped)
+        decoded = self.decoder(reshaped)
+
+        # Unflatten back to (B, T, C, H, W)
+        return decoded.reshape(*batch_shape, *self.output_shape)
 
 
 class RewardPredictor(nn.Module):

@@ -102,3 +102,46 @@ def test_replay_buffer_state_dict_round_trip() -> None:
         assert original.reward == loaded.reward
         assert (original.observation == loaded.observation).all()
         assert (original.next_observation == loaded.next_observation).all()
+
+
+def test_replay_buffer_add_batch_stores_all_transitions() -> None:
+    buffer = ReplayBuffer(capacity=16)
+    n = 4
+    obs = np.arange(n * 2 * 2, dtype=np.uint8).reshape(n, 2, 2)
+    act = np.ones((n, 2), dtype=np.float32)
+    rew = np.arange(n, dtype=np.float32)
+    next_obs = obs + 1
+    dones = np.array([False, True, False, False])
+    terminated = np.array([False, True, False, False])
+    truncated = np.array([False, False, False, False])
+
+    buffer.add_batch(obs, act, rew, next_obs, dones, terminated, truncated)
+
+    assert len(buffer) == 4
+    assert buffer.transitions[1].done is True
+    assert buffer.transitions[1].terminated is True
+    assert buffer.transitions[0].reward == 0.0
+    assert buffer.transitions[3].reward == 3.0
+    assert (buffer.transitions[0].observation == obs[0]).all()
+
+
+def test_replay_buffer_add_batch_wraps_around() -> None:
+    buffer = ReplayBuffer(capacity=4)
+    obs = np.zeros((3, 2, 2), dtype=np.uint8)
+    act = np.zeros((3, 1), dtype=np.float32)
+    rew = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    next_obs = obs.copy()
+    dones = np.zeros(3, dtype=bool)
+    terminated = np.zeros(3, dtype=bool)
+    truncated = np.zeros(3, dtype=bool)
+
+    buffer.add_batch(obs, act, rew, next_obs, dones, terminated, truncated)
+    assert len(buffer) == 3
+
+    # Second batch wraps around
+    rew2 = np.array([4.0, 5.0, 6.0], dtype=np.float32)
+    buffer.add_batch(obs, act, rew2, next_obs, dones, terminated, truncated)
+    assert len(buffer) == 4  # capped at capacity
+    # The newest entries should be accessible
+    rewards = [t.reward for t in buffer.transitions]
+    assert 6.0 in rewards
