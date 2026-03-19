@@ -1,4 +1,8 @@
-"""Reproducibility helpers.
+"""Global seed initialization for reproducibility.
+
+Sets Python’s ``random``, NumPy’s RNG, PyTorch CPU and CUDA seeds,
+and optionally enables PyTorch deterministic mode (at the cost of
+some performance).
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

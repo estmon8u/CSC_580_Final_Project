@@ -1,6 +1,11 @@
-"""Weight initialization utilities (DreamerV1 reference pattern).
+"""Weight initialization utilities following the DreamerV1 reference.
 
-Name: Esteban
+Applies Kaiming uniform initialization to all Conv2d, ConvTranspose2d,
+and Linear layers, with biases zeroed.  This is applied once during
+model construction in ``TinyWorldModel``, ``Actor``, ``Critic``, and
+``DiscreteActor``.
+
+Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot

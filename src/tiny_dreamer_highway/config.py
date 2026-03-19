@@ -1,5 +1,10 @@
 """Typed experiment configuration for Tiny Dreamer Highway.
 
+All hyperparameters — environment, replay buffer, training schedule,
+model dimensions, and evaluation settings — are defined as Pydantic
+models with validation constraints.  A YAML file is loaded via
+``load_experiment_config()`` and validated into an ``ExperimentConfig``.
+
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road

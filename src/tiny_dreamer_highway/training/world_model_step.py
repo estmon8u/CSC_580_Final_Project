@@ -1,4 +1,14 @@
-"""Tiny world-model loss and optimization helpers.
+"""Single-transition world-model loss and optimization helpers.
+
+Provides the per-transition loss computation used as a building block
+by ``sequence_world_model_step.py``.  Key exports:
+
+* ``gaussian_kl_divergence`` — analytic KL between two diagonal
+  Gaussians (the Dreamer prior and posterior).
+* ``compute_world_model_losses`` — reconstruction, reward, continue,
+  and KL losses for a single world-model forward output.
+* ``_backward_and_step`` — gradient clipping + optimizer step with
+  optional AMP scaling.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

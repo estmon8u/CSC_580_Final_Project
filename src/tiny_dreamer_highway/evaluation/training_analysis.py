@@ -1,4 +1,11 @@
-"""Training history analysis helpers for Tiny Dreamer Highway.
+"""Training history analysis and plotting for the final project report.
+
+Reads the CSV metrics log produced by ``metrics_logging.py`` and:
+
+* Produces a 2×2 training curves plot (world-model losses, behavior
+  losses, reward trends, and replay/crash statistics).
+* Computes a summary dict with best-step pointers for key metrics.
+* Exports both as report-ready artifacts.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -38,6 +45,7 @@ def _parse_metric_value(key: str | None, value: Any) -> int | float | None:
 
 
 def load_cycle_metrics_history(metrics_csv: str | Path) -> list[dict[str, int | float]]:
+    """Load the training CSV log into a list of per-cycle metric dicts."""
     path = Path(metrics_csv)
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -54,6 +62,11 @@ def load_cycle_metrics_history(metrics_csv: str | Path) -> list[dict[str, int | 
 
 
 def summarize_training_history(history: list[dict[str, int | float]]) -> dict[str, Any]:
+    """Extract key milestones from the training history.
+
+    Returns best world-model loss step, best imagined reward step,
+    best evaluation reward step, and the latest metrics snapshot.
+    """
     if not history:
         raise ValueError("history must contain at least one record")
 
@@ -86,6 +99,14 @@ def plot_training_history(
     *,
     title: str = "Tiny Dreamer Training History",
 ) -> Path:
+    """Generate a 2×2 training curves figure and save to disk.
+
+    Panels:
+    - Top-left: World-model losses (total, reconstruction, reward, KL, etc.).
+    - Top-right: Actor and critic losses.
+    - Bottom-left: Imagined reward and evaluation reward trends.
+    - Bottom-right: Replay buffer size and evaluation crash rate.
+    """
     if not history:
         raise ValueError("history must contain at least one record")
 
@@ -187,6 +208,7 @@ def export_training_history_artifacts(
     *,
     prefix: str = "training_history",
 ) -> dict[str, Path]:
+    """Load training CSV, generate summary JSON + plot, and return paths."""
     output_directory = Path(output_dir)
     output_directory.mkdir(parents=True, exist_ok=True)
 

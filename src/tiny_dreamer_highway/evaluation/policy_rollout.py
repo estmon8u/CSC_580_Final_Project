@@ -1,13 +1,22 @@
-"""Record agent-driving demo videos from a trained policy.
+"""Agent driving demo generation and policy rollout evaluation.
+
+This module loads a trained checkpoint and runs the actor policy inside
+the real highway-env, capturing rendered RGB frames and saving them as
+animated GIFs that show the agent actually driving.  It also provides
+the single-episode rollout function used by the in-training evaluation
+(``evaluate_training_policy`` in ``experiment.py``).
+
+Key functions:
+
+* ``run_policy_episode`` — run one episode with the trained actor,
+  optionally capturing rendered frames.
+* ``record_demo_videos`` — high-level convenience that loads a
+  checkpoint, runs multiple episodes, and saves GIFs + summary.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
 AI tools consulted: GitHub Copilot
-
-This module loads a trained checkpoint and runs the actor policy inside the
-real highway-env, capturing rendered RGB frames and saving them as animated
-GIFs that show the agent actually driving.
 """
 
 from __future__ import annotations

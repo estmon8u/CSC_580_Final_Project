@@ -1,4 +1,8 @@
-"""Safe continuous-action post-processing helpers.
+"""Continuous action post-processing: scaling, smoothing, and clamping.
+
+Both tensor (PyTorch) and array (NumPy) variants are provided so that
+the same action stabilization can be used during policy collection
+(tensors on GPU) and random warm-start collection (arrays on CPU).
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

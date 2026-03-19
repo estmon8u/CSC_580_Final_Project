@@ -1,4 +1,10 @@
-"""Checkpoint save/load helpers for Tiny Dreamer Highway.
+"""Checkpoint save/load helpers for training state persistence.
+
+Handles serialization and deserialization of the full training state:
+world model, actor, critic, all three optimizers, the replay buffer,
+LR scheduler states, and per-cycle metrics.  Includes a compatibility
+layer (``_strip_compiled_prefix``) for loading checkpoints saved with
+``torch.compile``-wrapped modules.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

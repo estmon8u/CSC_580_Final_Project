@@ -1,5 +1,9 @@
 """Helpers for packaging report-ready evaluation artifacts.
 
+Provides utilities to copy generated artifacts (GIFs, plots, JSONs)
+into a clean directory structure, write a manifest file, and
+optionally compress everything into a ZIP archive for submission.
+
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
 Assignment: Final Project — Dream the Road
@@ -19,6 +23,7 @@ def copy_artifact_files(
     artifacts: Mapping[str, str | Path],
     output_dir: str | Path,
 ) -> dict[str, Path]:
+    """Copy named artifact files into a single output directory."""
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -40,6 +45,7 @@ def write_bundle_manifest(
     copied_files: Mapping[str, Path],
     metadata: Mapping[str, object] | None = None,
 ) -> Path:
+    """Write a JSON manifest listing all files in the bundle."""
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     manifest = {
@@ -52,6 +58,7 @@ def write_bundle_manifest(
 
 
 def create_bundle_archive(bundle_dir: str | Path, archive_path: str | Path) -> Path:
+    """Compress a bundle directory into a deflated ZIP archive."""
     directory = Path(bundle_dir)
     if not directory.exists():
         raise FileNotFoundError(f"bundle directory does not exist: {directory}")
@@ -73,6 +80,11 @@ def export_submission_bundle(
     metadata: Mapping[str, object] | None = None,
     create_archive: bool = True,
 ) -> dict[str, Path]:
+    """Package artifacts into a submission-ready bundle with manifest.
+
+    Copies all named artifact files, writes a manifest JSON, and
+    optionally creates a ZIP archive of the bundle directory.
+    """
     bundle_dir = Path(output_dir) / bundle_name
     bundle_dir.mkdir(parents=True, exist_ok=True)
 

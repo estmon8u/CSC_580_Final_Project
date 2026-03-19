@@ -1,4 +1,12 @@
-"""Shared typed containers for Tiny Dreamer Highway.
+"""Shared typed containers used across the Tiny Dreamer codebase.
+
+Defines the data structures that flow between the environment,
+replay buffer, and training pipeline:
+
+* ``Transition`` — a single ``(s, a, r, s', done)`` environment step.
+* ``ReplayBatch`` — a randomly-sampled batch of transitions.
+* ``ReplaySequenceBatch`` — a batch of contiguous sequences for
+  world-model training.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

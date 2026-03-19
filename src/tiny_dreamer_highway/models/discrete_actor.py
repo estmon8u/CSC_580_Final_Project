@@ -1,4 +1,10 @@
-"""Discrete actor network for imagined control.
+"""Discrete actor network for DreamerV1 behavior learning.
+
+This actor handles discrete action spaces (e.g., Highway-Env’s
+``DiscreteMetaAction`` for lane changes and speed adjustments).
+It outputs one-hot action vectors using temperature-controlled
+Gumbel-Softmax during training for differentiable action selection,
+and hard argmax during evaluation for deterministic behavior.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -16,12 +22,20 @@ from tiny_dreamer_highway.utils.weight_init import apply_kaiming_init
 
 
 class DiscreteActor(nn.Module):
-    """Categorical actor for discrete action spaces (e.g. DiscreteMetaAction).
+    """Categorical actor for discrete action spaces.
 
-    During ``training`` mode, uses Gumbel-Softmax (straight-through) so that
-    the one-hot output is differentiable for imagination-based policy
-    learning.  During ``eval()`` mode, returns a hard one-hot from argmax
-    for deterministic action selection.
+    During ``training`` mode, uses Gumbel-Softmax (straight-through) so
+    that the one-hot output is differentiable through the sampling
+    operation, enabling imagination-based policy learning.  During
+    ``eval()`` mode, returns a hard one-hot from argmax for deterministic
+    action selection.
+
+    Args:
+        latent_dim:          Width of the input latent feature vector.
+        num_actions:         Number of discrete actions.
+        hidden_dim:          Width of each hidden layer.
+        num_layers:          Number of hidden layers.
+        gumbel_temperature:  Temperature for Gumbel-Softmax (lower = harder).
     """
 
     def __init__(

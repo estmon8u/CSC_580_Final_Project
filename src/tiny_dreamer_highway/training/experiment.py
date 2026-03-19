@@ -1,4 +1,27 @@
-"""End-to-end training runner for Tiny Dreamer Highway.
+"""End-to-end training runner for the Tiny Dreamer Highway agent.
+
+This module is the top-level entry point for a training experiment.  It
+wires together all components: environment creation, model initialization,
+optimizer setup, checkpoint resume, the alternating train–collect loop,
+periodic evaluation, metric export, and artifact management.
+
+Experiment lifecycle:
+
+1. **Initialization** — infer observation/action shapes from a probe
+   environment, instantiate the world model, actor, critic, optimizers,
+   and replay buffer.
+2. **Optional resume** — reload model/optimizer/scheduler/replay state
+   from a checkpoint file.  If the checkpoint is missing, the run
+   starts fresh and old artifacts are cleared.
+3. **Training loop** — iterate ``total_cycles`` training cycles (see
+   ``pipeline.run_training_cycle``).  Each cycle alternates world-model
+   updates, behavior updates, and real-environment policy collection.
+4. **Periodic evaluation** — run deterministic policy episodes and log
+   mean reward, crash rate, and episode length.
+5. **Checkpointing** — save full training state (model weights,
+   optimizer state, replay buffer, LR scheduler state) at configured
+   intervals.
+6. **Logging** — export per-cycle metrics to the ``logs/`` directory.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -26,6 +49,12 @@ from tiny_dreamer_highway.utils import set_global_seeds
 
 @dataclass(slots=True)
 class TrainingRunSummary:
+    """Summary returned after a training experiment completes.
+
+    Contains final replay size, the latest checkpoint path, and the
+    flattened metrics dict from the last cycle.
+    """
+
     total_cycles: int
     completed_cycles: int
     replay_size: int
@@ -44,6 +73,13 @@ def evaluate_training_policy(
     max_steps: int,
     seed: int | None = None,
 ) -> dict[str, float]:
+    """Run deterministic evaluation episodes and aggregate statistics.
+
+    Sets both the world model and actor to eval mode, runs ``episodes``
+    rollouts with no gradient tracking, and returns mean reward, mean
+    steps, and crash rate.  The original training mode is restored
+    afterwards.
+    """
     if episodes <= 0:
         return {}
 
@@ -85,12 +121,22 @@ def evaluate_training_policy(
 
 
 def resolve_training_device(device_name: str) -> torch.device:
+    """Map a config device string to a torch.device, falling back to CPU."""
     if device_name == "cuda" and not torch.cuda.is_available():
         return torch.device("cpu")
     return torch.device(device_name)
 
 
 def infer_env_shapes(config: ExperimentConfig) -> tuple[tuple[int, int, int], int]:
+    """Probe a temporary environment to discover observation and action shapes.
+
+    Creates the environment, resets it, and inspects:
+    - ``observation.shape`` → ``(C, H, W)`` for the CNN encoder.
+    - ``action_space.n`` (discrete) or ``action.shape[0]`` (continuous)
+      → ``action_dim`` for the actor and RSSM.
+
+    The environment is closed before returning.
+    """
     env = make_highway_env(config.env)
     try:
         observation, _ = env.reset(seed=config.seed)
@@ -140,6 +186,18 @@ def initialize_training_state(
     torch.optim.Optimizer,
     torch.optim.Optimizer,
 ]:
+    """Instantiate all training components from a config.
+
+    Creates the replay buffer, world model, actor (continuous or
+    discrete depending on ``config.env.action.is_discrete``), critic,
+    and three AdamW optimizers.  All models are moved to the configured
+    device.  When CUDA is available, float32 matmul precision is set
+    to ``"high"`` for speed.
+
+    Returns:
+        7-tuple of (replay_buffer, world_model, actor, critic,
+        world_model_optimizer, actor_optimizer, critic_optimizer).
+    """
     device = resolve_training_device(config.device)
     if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
@@ -216,6 +274,31 @@ def run_training_experiment(
     resume_from: str | Path | None = None,
     show_progress: bool = True,
 ) -> TrainingRunSummary:
+    """Run a complete DreamerV1 training experiment.
+
+    This is the highest-level training API.  It handles:
+
+    * Global seed initialization for reproducibility.
+    * Model and optimizer creation (or resumption from checkpoint).
+    * LR warm-up scheduler setup and state restoration.
+    * AMP (automatic mixed precision) configuration.
+    * The main training loop with periodic evaluation, checkpointing,
+      and progress logging.
+    * Cleanup of stale artifacts when starting fresh.
+
+    Args:
+        config:              Full experiment configuration.
+        artifact_root:       Directory for checkpoints, logs, and outputs.
+        cycles:              Override ``config.training.cycles``.
+        warm_start_steps:    Override ``config.training.warm_start_steps``.
+        policy_steps:        Override ``config.training.policy_steps``.
+        checkpoint_interval: Override ``config.training.checkpoint_interval``.
+        resume_from:         Path to a checkpoint file to resume from.
+        show_progress:       Whether to print per-cycle status lines.
+
+    Returns:
+        ``TrainingRunSummary`` with final statistics and paths.
+    """
     set_global_seeds(config.seed, deterministic_torch=config.training.deterministic_torch)
 
     total_cycles = config.training.cycles if cycles is None else cycles
@@ -240,6 +323,7 @@ def run_training_experiment(
                 flush=True,
             )
 
+    # Clear stale artifacts only for truly fresh runs
     if resolved_resume is None and artifact_directory.exists():
         shutil.rmtree(artifact_directory)
     checkpoint_dir = artifact_directory / "checkpoints"
@@ -270,12 +354,15 @@ def run_training_experiment(
         )
         start_step = int(metadata["step"]) + 1
 
-    # LR warm-up schedulers (None when warmup_steps == 0)
+    # LR warm-up schedulers: linearly ramp learning rate from ~0 to the
+    # base LR over the configured number of optimizer steps.  Returns
+    # None when warmup_steps == 0 (no warmup).
     wm_scheduler = _make_warmup_scheduler(world_model_optimizer, config.training.lr_warmup_steps)
     actor_scheduler = _make_warmup_scheduler(actor_optimizer, config.training.lr_warmup_steps)
     critic_scheduler = _make_warmup_scheduler(critic_optimizer, config.training.lr_warmup_steps)
 
-    # Restore scheduler state from checkpoint so warmup continues correctly
+    # Restore scheduler state from checkpoint so warmup progression
+    # continues correctly from where it left off.
     if resolved_resume is not None:
         saved_schedulers = metadata.get("schedulers")
         if saved_schedulers is not None:
@@ -286,7 +373,9 @@ def run_training_experiment(
             if critic_scheduler is not None and "critic_scheduler" in saved_schedulers:
                 critic_scheduler.load_state_dict(saved_schedulers["critic_scheduler"])
 
-    # AMP – automatic mixed precision (disabled by default)
+    # AMP — automatic mixed precision: run forward/backward in bfloat16
+    # or float16 for faster compute and lower memory on CUDA GPUs.
+    # bfloat16 does not require gradient scaling; float16 does.
     device = resolve_training_device(config.device)
     if config.training.use_amp and device.type == "cuda":
         amp_dtype = resolve_amp_dtype(config.training.amp_dtype)
@@ -356,9 +445,9 @@ def run_training_experiment(
                 seed=config.seed + step * 1_000,
             )
 
-        # Step LR warm-up schedulers once per *optimizer step*, not once per
-        # cycle.  Each cycle performs world_model_updates_per_cycle WM steps
-        # and behavior_updates_per_cycle actor/critic steps.
+        # Step LR warm-up schedulers once per *optimizer step*, not once
+        # per cycle.  Each cycle runs N world-model steps and M behavior
+        # steps, so we advance the schedulers by those counts.
         n_wm = config.training.world_model_updates_per_cycle
         n_beh = config.training.behavior_updates_per_cycle
         if wm_scheduler is not None:

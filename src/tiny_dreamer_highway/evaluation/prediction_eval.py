@@ -1,4 +1,22 @@
-"""N-step prediction evaluation helpers.
+"""N-step prediction evaluation for world-model quality assessment.
+
+Provides functions to measure how well the trained world model
+predicts future observations when rolled out purely through its
+learned dynamics (the RSSM prior).  This is a key diagnostic:
+if the model can accurately predict several frames ahead, the
+imagined trajectories used for behavior learning will be informative.
+
+Metrics computed per prediction step:
+
+* **MSE** — Mean squared error between predicted and target frames.
+* **PSNR** — Peak signal-to-noise ratio (higher = better).
+* **SSIM** — Structural similarity index (higher = better).
+* **NLL** (optional) — Negative log-likelihood under the decoder’s
+  Gaussian observation model.
+
+Also provides ``evaluate_latent_rollout_consistency`` which compares
+imagined prior states against grounded posterior states to measure
+latent-space drift over multi-step rollouts.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -32,6 +50,20 @@ def compute_frame_metrics(
     *,
     observation_std: float | None = None,
 ) -> dict[str, float]:
+    """Compute per-frame image quality metrics.
+
+    Both tensors are normalized to [0, 1] before comparison.  SSIM is
+    computed per-sample and averaged across the batch.
+
+    Args:
+        predicted: Predicted frames, shape ``(B, C, H, W)``.
+        target:    Ground-truth frames, same shape.
+        observation_std: If provided, also computes NLL under a
+            diagonal Gaussian with this fixed std.
+
+    Returns:
+        Dict with ``mse``, ``psnr``, ``ssim``, and optionally ``nll``.
+    """
     if predicted.shape != target.shape:
         raise ValueError("predicted and target must have matching shapes")
 
@@ -123,6 +155,16 @@ def evaluate_n_step_predictions(
     future_actions: Tensor,
     target_observations: Tensor,
 ) -> dict[str, object]:
+    """Run N-step imagined rollout and evaluate against ground truth.
+
+    Seeds the RSSM from ``seed_observation``, imagines forward for
+    ``H`` steps using the prior only, then compares each predicted
+    frame against the corresponding target.
+
+    Returns:
+        Dict with ``predictions`` tensor, per-step ``step_metrics``,
+        and an aggregated ``summary`` with mean MSE/PSNR/SSIM.
+    """
     if target_observations.ndim != 5:
         raise ValueError("target_observations must have shape (B, H, C, H, W)")
     if future_actions.shape[:2] != target_observations.shape[:2]:
@@ -165,6 +207,18 @@ def evaluate_latent_rollout_consistency(
     prev_action: Tensor | None = None,
     prev_state: LatentState | None = None,
 ) -> dict[str, object]:
+    """Compare imagined prior states against grounded posterior states.
+
+    At each step, the imagined trajectory uses only the prior
+    (``imagine_step``), while the grounded trajectory uses the
+    posterior (``observe_step`` with the real observation).  Metrics
+    measure how quickly the imagined latent state drifts from ground
+    truth, providing a diagnostic for world-model accuracy.
+
+    Returns:
+        Dict with per-step metrics (deterministic/stochastic/feature
+        MSE plus prior–posterior KL) and an aggregated ``summary``.
+    """
     if seed_observation.ndim != 4:
         raise ValueError("seed_observation must have shape (B, C, H, W)")
     if future_actions.ndim != 3:

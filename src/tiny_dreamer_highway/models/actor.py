@@ -1,4 +1,13 @@
-"""Actor network for imagined control.
+"""Continuous actor network for DreamerV1 behavior learning.
+
+The actor maps latent features ``[h_t ; s_t]`` to continuous actions
+via a tanh-normal distribution.  During training, actions are sampled
+with the reparameterization trick (tanh transform applied to a normal
+sample) so gradients flow through the sampling.  During evaluation,
+only the mean is used for deterministic action selection.
+
+The ``init_std`` / ``mean_scale`` parameterization follows the
+reference Dreamer implementation to ensure wide initial exploration.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

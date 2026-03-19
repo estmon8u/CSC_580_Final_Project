@@ -1,4 +1,14 @@
-"""Critic network for imagined value estimation.
+"""Critic (value) network for DreamerV1 behavior learning.
+
+The critic estimates the expected discounted return from a given latent
+state.  During behavior learning, the actor proposes actions, the RSSM
+imagines future states via the prior, and the critic evaluates the
+resulting trajectory to produce λ-return targets.
+
+The value is modeled as a Gaussian with a fixed standard deviation,
+following the same probabilistic convention as the decoder and reward
+heads.  The ``forward`` method returns the scalar mean prediction;
+``distribution`` wraps it in a ``Normal`` for optional log-prob usage.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -16,6 +26,18 @@ from tiny_dreamer_highway.utils.weight_init import apply_kaiming_init
 
 
 class Critic(nn.Module):
+    """MLP value function: latent features → scalar state value.
+
+    Architecture: ``num_layers`` × (Linear + ELU) → Linear(1).
+    Initialized with Kaiming uniform for stable early training.
+
+    Args:
+        latent_dim:       Width of the input ``[h_t ; s_t]`` vector.
+        hidden_dim:       Width of each hidden layer.
+        num_layers:       Number of hidden layers.
+        distribution_std: Fixed std for the Gaussian value model.
+    """
+
     def __init__(
         self,
         latent_dim: int,

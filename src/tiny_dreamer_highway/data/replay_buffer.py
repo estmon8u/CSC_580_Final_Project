@@ -1,4 +1,18 @@
-"""Replay buffer utilities for Tiny Dreamer Highway.
+"""Ring-buffer replay storage for off-policy sequence sampling.
+
+The ``ReplayBuffer`` stores transitions in preallocated NumPy arrays
+for cache-efficient access and fast vectorized batch sampling.  Key
+design points:
+
+* **Lazy allocation** — arrays are allocated on the first ``add()``
+  call so no observation/action shape is required at construction.
+* **Ring-buffer** — when the buffer reaches ``capacity``, new
+  transitions overwrite the oldest ones.
+* **Sequence sampling** — ``sample_sequence_batch()`` returns
+  contiguous windows of length ``sequence_length`` that do not span
+  episode boundaries (validated via a cached validity bitmap).
+* **Serialization** — ``state_dict()`` / ``load_state_dict()`` enable
+  checkpoint persistence of the replay buffer.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

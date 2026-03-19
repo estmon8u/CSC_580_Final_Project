@@ -1,4 +1,15 @@
-"""Imagination and actor-critic training helpers.
+"""Imagination-based actor-critic training for DreamerV1.
+
+Implements the behavior-learning loop where:
+
+1. The actor proposes actions from imagined latent states.
+2. The RSSM prior predicts future states without real observations.
+3. The reward predictor and critic evaluate the imagined trajectory.
+4. TD-λ returns are computed as value targets for the critic.
+5. The actor is trained to maximize imagined returns; the critic
+   is trained to predict them.
+
+Reference: Hafner et al., “Dream to Control” (ICLR 2020), Section 4.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

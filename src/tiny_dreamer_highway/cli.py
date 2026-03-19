@@ -1,4 +1,9 @@
-"""Command-line entry points for early project workflows.
+"""Command-line entry points for the Tiny Dreamer Highway project.
+
+Provides thin CLI wrappers around the core training and evaluation
+pipeline: loading a config, collecting random warm-start transitions,
+and running a full training experiment.  Each function returns a
+human-readable summary string.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

@@ -1,4 +1,18 @@
-"""Combined world-model forward pass utilities.
+"""Combined world model: encoder + RSSM + decoder + prediction heads.
+
+The ``TinyWorldModel`` bundles all components of the DreamerV1 world
+model into a single ``nn.Module``:
+
+* ``ObservationEncoder`` (CNN) — maps pixels to embeddings.
+* ``RecurrentStateSpaceModel`` (RSSM) — maintains latent dynamics.
+* ``ObservationDecoder`` (transposed CNN) — reconstructs pixels.
+* ``RewardPredictor`` (MLP) — predicts scalar rewards.
+* ``ContinuePredictor`` (MLP, optional) — predicts episode continuation.
+
+The single-step ``forward`` method is used during policy collection
+to update the latent state from a new observation.  The sequence-level
+training path in ``sequence_world_model_step.py`` calls the sub-modules
+directly for efficiency.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -21,6 +35,12 @@ from tiny_dreamer_highway.utils.weight_init import apply_kaiming_init
 
 @dataclass(slots=True)
 class WorldModelOutput:
+    """Output bundle from a single-step world-model forward pass.
+
+    Contains the observation embedding, prior and posterior latent
+    states, the reconstructed image, and all head predictions.
+    """
+
     embedding: Tensor
     prior_state: LatentState
     posterior_state: LatentState
@@ -32,6 +52,29 @@ class WorldModelOutput:
 
 
 class TinyWorldModel(nn.Module):
+    """Full DreamerV1 world model combining all sub-modules.
+
+    During construction, Kaiming uniform initialization is applied to
+    all Conv2d and Linear layers for stable training.
+
+    Args:
+        observation_shape:           ``(C, H, W)`` of the input images.
+        action_dim:                  Number of action dimensions.
+        embedding_dim:               Encoder output width.
+        deterministic_dim:           GRU hidden state width.
+        stochastic_dim:              Stochastic state width.
+        hidden_dim:                  RSSM MLP hidden layer width.
+        rssm_min_std:                Minimum std for the RSSM Gaussians.
+        rssm_num_layers:             Hidden layers in RSSM prior/posterior.
+        observation_distribution_std: Fixed std for decoder Gaussian.
+        reward_hidden_dim:           Reward head hidden width.
+        reward_num_layers:           Reward head hidden layers.
+        reward_distribution_std:     Fixed std for reward Gaussian.
+        use_continue_model:          Whether to include a continue head.
+        continue_hidden_dim:         Continue head hidden width.
+        continue_num_layers:         Continue head hidden layers.
+    """
+
     def __init__(
         self,
         observation_shape: tuple[int, int, int] = (1, 64, 64),
@@ -45,7 +88,7 @@ class TinyWorldModel(nn.Module):
         observation_distribution_std: float = 1.0,
         reward_hidden_dim: int = 200,
         reward_num_layers: int = 2,
-        reward_distribution_std: float = 1.0,  # Configurable reward distribution std
+        reward_distribution_std: float = 1.0,
         use_continue_model: bool = True,
         continue_hidden_dim: int = 200,
         continue_num_layers: int = 2,
@@ -76,7 +119,7 @@ class TinyWorldModel(nn.Module):
             latent_dim=latent_dim,
             hidden_dim=reward_hidden_dim,
             num_layers=reward_num_layers,
-            distribution_std=reward_distribution_std,  # Using configurable std
+            distribution_std=reward_distribution_std,
         )
         self.continue_predictor = (
             ContinuePredictor(
@@ -97,6 +140,20 @@ class TinyWorldModel(nn.Module):
         actions: Tensor,
         prev_state: LatentState | None = None,
     ) -> WorldModelOutput:
+        """Single-step forward pass used during policy collection.
+
+        Encodes the observation, advances the RSSM (computing both prior
+        and posterior), and runs the decoder + prediction heads on the
+        posterior features.
+
+        Args:
+            observations: Current frame, shape ``(B, C, H, W)`` or ``(C, H, W)``.
+            actions:      Action taken, shape ``(B, action_dim)`` or ``(action_dim,)``.
+            prev_state:   Previous RSSM state (defaults to zeros).
+
+        Returns:
+            ``WorldModelOutput`` with embeddings, latent states, and predictions.
+        """
         if observations.ndim == 3:
             observations = observations.unsqueeze(0)
         if actions.ndim == 1:

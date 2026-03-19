@@ -1,4 +1,13 @@
-"""Visualization helpers for n-step prediction artifacts.
+"""Visualization helpers for N-step prediction evaluation artifacts.
+
+Provides plotting and media export functions that compare the world
+model’s imagined observations against ground-truth frames:
+
+* ``plot_prediction_metrics`` — per-step MSE/PSNR/SSIM/NLL line plots.
+* ``save_prediction_comparison_grid`` — side-by-side target vs
+  predicted vs error heatmap grid.
+* ``export_prediction_video`` — animated GIF of the comparison.
+* ``export_prediction_media_bundle`` — all of the above in one call.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2

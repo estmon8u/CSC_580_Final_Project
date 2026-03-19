@@ -1,4 +1,13 @@
-"""Warm-start replay collection from random actions.
+"""Warm-start replay buffer collection from random actions.
+
+Before the world model can begin training, the replay buffer needs
+enough transitions to sample contiguous sequences of length
+``sequence_length``.  This module fills that initial quota by running
+the highway-env with a uniformly random policy.
+
+Each transition stores the observation, the action (one-hot for discrete,
+raw array for continuous), the reward, the next observation, and the
+termination/truncation flags.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -30,7 +39,22 @@ def collect_random_transitions(
     steps: int,
     seed: int | None = None,
 ) -> int:
-    """Collect transitions using a single environment with random actions."""
+    """Fill the replay buffer with random-policy transitions.
+
+    Creates a fresh environment, steps it ``steps`` times with uniformly
+    sampled actions, and stores each transition.  For continuous action
+    spaces, actions are smoothed via ``stabilize_action_array`` to reduce
+    jitter.  For discrete spaces, actions are stored as one-hot vectors.
+
+    Args:
+        config:        Environment configuration.
+        replay_buffer: Target replay buffer.
+        steps:         Number of environment steps to collect.
+        seed:          Optional seed for reproducibility.
+
+    Returns:
+        Number of transitions added to the buffer.
+    """
     is_discrete = config.action.is_discrete
     env = make_highway_env(config)
     if seed is not None and hasattr(env.action_space, "seed"):

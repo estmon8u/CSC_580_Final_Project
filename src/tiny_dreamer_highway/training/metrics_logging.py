@@ -1,4 +1,9 @@
-"""Lightweight metrics export helpers for training artifacts.
+"""Metrics export helpers for training artifacts.
+
+Provides functions to flatten per-cycle metrics into flat dicts and
+persist them as JSONL, CSV, and summary JSON files.  The CSV writer
+handles schema evolution (new metric keys appearing mid-training) by
+rewriting the header when necessary.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -17,6 +22,12 @@ from tiny_dreamer_highway.training.pipeline import PipelineCycleMetrics
 
 
 def flatten_cycle_metrics(step: int, metrics: PipelineCycleMetrics) -> dict[str, float | int]:
+    """Flatten a ``PipelineCycleMetrics`` into a single-level dict.
+
+    Prefixes world-model keys with ``world_model/``, behavior keys with
+    ``behavior/``, and evaluation keys with ``evaluation/`` for clean
+    CSV column names.
+    """
     if step < 0:
         raise ValueError("step must be non-negative")
 
@@ -33,6 +44,7 @@ def flatten_cycle_metrics(step: int, metrics: PipelineCycleMetrics) -> dict[str,
 
 
 def append_metrics_jsonl(log_file: str | Path, record: dict[str, Any]) -> Path:
+    """Append a single metrics record as one JSON line."""
     path = Path(log_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -41,6 +53,11 @@ def append_metrics_jsonl(log_file: str | Path, record: dict[str, Any]) -> Path:
 
 
 def append_metrics_csv(log_file: str | Path, record: dict[str, Any]) -> Path:
+    """Append a metrics record to a CSV file, handling schema evolution.
+
+    If new keys appear that weren’t in the original header, the file is
+    rewritten with an expanded header before appending the new row.
+    """
     path = Path(log_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(record.keys())
@@ -83,6 +100,7 @@ def write_artifact_summary(
     record: dict[str, Any],
     checkpoint_file: str | Path | None = None,
 ) -> Path:
+    """Write a JSON file with the latest step, metrics, and checkpoint path."""
     path = Path(summary_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     summary = {
@@ -101,6 +119,11 @@ def export_cycle_metrics(
     metrics: PipelineCycleMetrics,
     checkpoint_file: str | Path | None = None,
 ) -> dict[str, Path]:
+    """Export all metrics artifacts for one training cycle.
+
+    Writes three files: JSONL (append-only log), CSV (tabular log),
+    and a summary JSON with the latest checkpoint pointer.
+    """
     directory = Path(log_dir)
     record = flatten_cycle_metrics(step, metrics)
     jsonl_path = append_metrics_jsonl(directory / "cycle_metrics.jsonl", record)
