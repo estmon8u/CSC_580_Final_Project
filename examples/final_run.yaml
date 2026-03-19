@@ -50,12 +50,12 @@ env:
     high_speed_reward: 1.5
     lane_change_reward: 0.0           # <-- KILLED: No more reward for weaving
     overtake_reward: 5.0              # <-- The only way to get big points is passing safely
-    normalize_reward: true
+    normalize_reward: false            # <-- OFF: penalties/bonuses apply at face value, no hidden +0.4 baseline
     reward_speed_range: [25.0, 35.0]
-    offroad_terminal: false
-    offroad_penalty: 1.0              # <-- INCREASED: Make the grass hurt as much as a crash
-    steering_penalty: 0.01            # <-- NEW: Tiny tax for turning the wheel
-    steering_change_penalty: 0.05     # <-- NEW: Moderate tax for jerking the wheel back and forth
+    offroad_terminal: true             # <-- ON: episode ends if agent leaves road (stops spinning exploit)
+    offroad_penalty: 0.5               # <-- Face-value now (no 0.4× dilution); 0.5 is enough
+    steering_penalty: 0.005            # <-- Light touch at face value
+    steering_change_penalty: 0.02      # <-- Discourages jitter without blocking lane changes
 replay:
   capacity: 500000
   sequence_length: 16
