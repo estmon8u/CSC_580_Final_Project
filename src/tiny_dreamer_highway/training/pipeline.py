@@ -19,7 +19,7 @@ from torch import Tensor, optim
 from tiny_dreamer_highway.config import ExperimentConfig, TrainingConfig
 from tiny_dreamer_highway.data.collect_random_rollouts import collect_random_transitions
 from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
-from tiny_dreamer_highway.envs.highway_factory import make_highway_env, make_vectorized_highway_env
+from tiny_dreamer_highway.envs.highway_factory import make_highway_env
 from tiny_dreamer_highway.models import Actor, LatentState, TinyWorldModel, Critic
 from tiny_dreamer_highway.models.discrete_actor import DiscreteActor
 from tiny_dreamer_highway.training.behavior_learning import train_behavior_step
@@ -134,28 +134,9 @@ def collect_actor_transitions(
     steps: int,
     seed: int | None = None,
 ) -> int:
+    """Collect transitions using a single environment and the learned policy."""
     if steps <= 0:
         return 0
-
-    num_envs = config.env.num_envs
-    if num_envs > 1:
-        return _collect_actor_transitions_vectorized(
-            config, replay_buffer, world_model, actor, steps, seed, num_envs,
-        )
-    return _collect_actor_transitions_single(
-        config, replay_buffer, world_model, actor, steps, seed,
-    )
-
-
-def _collect_actor_transitions_single(
-    config: ExperimentConfig,
-    replay_buffer: ReplayBuffer,
-    world_model: TinyWorldModel,
-    actor: Actor | DiscreteActor,
-    steps: int,
-    seed: int | None = None,
-) -> int:
-    """Original single-env collection path (num_envs == 1)."""
     is_discrete = config.env.action.is_discrete
     env = make_highway_env(config.env)
     if seed is not None and hasattr(env.action_space, "seed"):
@@ -218,131 +199,6 @@ def _collect_actor_transitions_single(
         env.close()
 
     return added
-
-
-def _collect_actor_transitions_vectorized(
-    config: ExperimentConfig,
-    replay_buffer: ReplayBuffer,
-    world_model: TinyWorldModel,
-    actor: Actor | DiscreteActor,
-    steps: int,
-    seed: int | None,
-    num_envs: int,
-) -> int:
-    """Vectorized collection: N envs step in parallel via SyncVectorEnv."""
-    import math
-
-    is_discrete = config.env.action.is_discrete
-    model_device = _module_device(world_model)
-    action_dim = world_model.rssm.action_dim
-
-    vec_env = make_vectorized_highway_env(config.env)
-    observations, _ = vec_env.reset(seed=seed)
-
-    prev_state = world_model.rssm.initial_state(batch_size=num_envs, device=model_device)
-    prev_action = torch.zeros(num_envs, action_dim, device=model_device)
-
-    iterations = math.ceil(steps / num_envs)
-
-    # Accumulate raw batch arrays per step.  After collection we
-    # stack along axis=1 to get (N, T, ...) and flush each env's
-    # trajectory contiguously via add_batch, avoiding both the
-    # interleaved-layout bug and Python-loop insertion overhead.
-    hist_obs: list[np.ndarray] = []
-    hist_act: list[np.ndarray] = []
-    hist_rew: list[np.ndarray] = []
-    hist_next_obs: list[np.ndarray] = []
-    hist_done: list[np.ndarray] = []
-    hist_term: list[np.ndarray] = []
-    hist_trunc: list[np.ndarray] = []
-
-    try:
-        for _ in range(iterations):
-            with torch.inference_mode():
-                obs_tensor = torch.from_numpy(np.asarray(observations)).to(
-                    device=model_device, non_blocking=True
-                )
-                # observations from SyncVectorEnv are (N, H, W) or (N, C, H, W)
-                if obs_tensor.ndim == 3:
-                    obs_tensor = obs_tensor.unsqueeze(1)  # → (N, 1, H, W)
-
-                posterior = world_model(obs_tensor, prev_action, prev_state=prev_state)
-                current_state = posterior.posterior_state
-
-                raw_action_tensor = actor(current_state.features)
-
-                if is_discrete:
-                    action_tensor = raw_action_tensor
-                    stored_actions = action_tensor.float().cpu().numpy()
-                    env_actions = raw_action_tensor.argmax(dim=-1).cpu().numpy()
-                else:
-                    action_tensor = stabilize_action_tensor(
-                        raw_action_tensor,
-                        previous_action=prev_action,
-                        longitudinal_scale=config.env.action.longitudinal_scale,
-                        lateral_scale=config.env.action.lateral_scale,
-                        smoothing_factor=config.env.action.smoothing_factor,
-                        lateral_enabled=config.env.action.lateral,
-                    )
-                    stored_actions = action_tensor.float().cpu().numpy()
-                    env_actions = stored_actions
-
-            next_observations, rewards, terminations, truncations, infos = vec_env.step(env_actions)
-            dones = terminations | truncations
-
-            # Intercept Gymnasium's auto-reset to get the true terminal frames
-            real_next_obs = np.copy(next_observations)
-            if "_final_observation" in infos and "final_observation" in infos:
-                final_mask = infos["_final_observation"]
-                final_frames = infos["final_observation"]
-                for i in range(num_envs):
-                    if final_mask[i] and final_frames[i] is not None:
-                        real_next_obs[i] = final_frames[i]
-
-            # Copy observations because SyncVectorEnv may reuse buffers
-            hist_obs.append(np.copy(observations))
-            hist_act.append(stored_actions.copy())
-            hist_rew.append(rewards.astype(np.float32))
-            hist_next_obs.append(real_next_obs)  # already a copy
-            hist_done.append(dones.copy())
-            hist_term.append(terminations.copy())
-            hist_trunc.append(truncations.copy())
-
-            observations = next_observations
-            prev_action = action_tensor
-            prev_state = current_state
-
-            # Reset RSSM state for done envs using torch.where
-            if dones.any():
-                done_mask = torch.tensor(dones, device=model_device, dtype=torch.bool).unsqueeze(-1)
-                init_state = world_model.rssm.initial_state(batch_size=num_envs, device=model_device)
-                prev_action = torch.where(done_mask, torch.zeros_like(prev_action), prev_action)
-                prev_state.deterministic = torch.where(done_mask, init_state.deterministic, prev_state.deterministic)
-                prev_state.stochastic = torch.where(done_mask, init_state.stochastic, prev_state.stochastic)
-    finally:
-        vec_env.close()
-
-    # Stack & Transpose: (T, N, ...) → (N, T, ...) then flush per-env
-    env_obs = np.stack(hist_obs, axis=1)          # (N, T, ...)
-    env_act = np.stack(hist_act, axis=1)          # (N, T, action_dim)
-    env_rew = np.stack(hist_rew, axis=1)          # (N, T)
-    env_next_obs = np.stack(hist_next_obs, axis=1)
-    env_done = np.stack(hist_done, axis=1)        # (N, T)
-    env_term = np.stack(hist_term, axis=1)
-    env_trunc = np.stack(hist_trunc, axis=1)
-
-    for i in range(num_envs):
-        replay_buffer.add_batch(
-            observations=env_obs[i],
-            actions=env_act[i],
-            rewards=env_rew[i],
-            next_observations=env_next_obs[i],
-            dones=env_done[i],
-            terminated=env_term[i],
-            truncated=env_trunc[i],
-        )
-
-    return num_envs * iterations
 
 
 def run_training_cycle(

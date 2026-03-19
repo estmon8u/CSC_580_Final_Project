@@ -21,7 +21,6 @@ env:
   vehicles_count: 20
   simulation_frequency: 15
   policy_frequency: 5
-  num_envs: 4
   action:
     type: discrete
     num_actions: 5

@@ -54,7 +54,6 @@ class EnvConfig(BaseModel):
     npc_speed_scale: float = Field(default=1.0, gt=0.5, le=1.0)
     simulation_frequency: int = Field(default=15, ge=1, le=60)
     policy_frequency: int = Field(default=5, ge=1, le=30)
-    num_envs: int = Field(default=1, ge=1, le=32)
     action: ActionConfig = Field(default_factory=ActionConfig)
     reward: RewardConfig = Field(default_factory=RewardConfig)
 

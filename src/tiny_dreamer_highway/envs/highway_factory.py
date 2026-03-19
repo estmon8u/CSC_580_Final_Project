@@ -224,13 +224,6 @@ def build_highway_env_kwargs(config: EnvConfig) -> dict[str, Any]:
     }
 
 
-def make_vectorized_highway_env(config: EnvConfig) -> gym.vector.SyncVectorEnv:
-    """Create a vectorized environment with ``config.num_envs`` copies."""
-    def _make_single(i: int = 0):
-        return make_highway_env(config)
-    return gym.vector.SyncVectorEnv([lambda i=i: _make_single(i) for i in range(config.num_envs)])
-
-
 def make_highway_env(config: EnvConfig):
     import highway_env  # noqa: F401
 

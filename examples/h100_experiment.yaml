@@ -20,7 +20,6 @@ env:
   npc_speed_scale: 0.96
   simulation_frequency: 15
   policy_frequency: 5
-  num_envs: 4
   action:
     type: continuous
     longitudinal: true
