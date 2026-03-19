@@ -193,15 +193,25 @@ def initialize_training_state(
     # the entire modules. This prevents PyTorch Dynamo from suffering
     # "graph breaks" on Python-heavy logic like tensor reshaping,
     # explicit dtype casting, and custom Dataclasses (LatentState).
+    #
+    # dynamic=True tells Dynamo to treat the batch dimension as symbolic
+    # so it compiles ONE graph that works for all batch sizes, instead of
+    # recompiling for every new (B*T, ...) shape it encounters.  Without
+    # this, the encoder hits recompile_limit because training passes
+    # (B*T, C, H, W) while policy collection passes (1, C, H, W).
     if device.type == "cuda" and hasattr(torch, "compile"):
-        world_model.encoder.conv_stack = torch.compile(world_model.encoder.conv_stack)
-        world_model.decoder.decoder = torch.compile(world_model.decoder.decoder)
+        world_model.encoder.conv_stack = torch.compile(
+            world_model.encoder.conv_stack, dynamic=True,
+        )
+        world_model.decoder.decoder = torch.compile(
+            world_model.decoder.decoder, dynamic=True,
+        )
 
         # Safely check for the sequential attributes before compiling
         if hasattr(actor, "net"):
-            actor.net = torch.compile(actor.net)
+            actor.net = torch.compile(actor.net, dynamic=True)
         if hasattr(critic, "value"):
-            critic.value = torch.compile(critic.value)
+            critic.value = torch.compile(critic.value, dynamic=True)
 
     world_model_optimizer = _make_optimizer(
         world_model.parameters(),
