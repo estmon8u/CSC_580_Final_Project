@@ -39,7 +39,7 @@ env:
     lane_change_reward: 0.0
     overtake_reward: 1.5
     normalize_reward: true
-    reward_speed_range: [24.0, 35.0]
+    reward_speed_range: [25.0, 35.0]
     offroad_terminal: true
     offroad_penalty: 0.5
     steering_penalty: 0.0075
@@ -51,7 +51,7 @@ replay:
 training:
   batch_size: 256
   imagination_horizon: 20
-  discount: 0.99
+  discount: 0.95
   lambda_: 0.95
   overshooting_horizon: 0
   overshooting_kl_weight: 0.0
