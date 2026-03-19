@@ -18,6 +18,19 @@ if TYPE_CHECKING:
     from tiny_dreamer_highway.data.replay_buffer import ReplayBuffer
 
 
+def _strip_compiled_prefix(state_dict: dict[str, Any]) -> dict[str, Any]:
+    """Remove ``_orig_mod.`` prefixes injected by ``torch.compile``.
+
+    When a module is wrapped with ``torch.compile`` its parameters are
+    stored under an ``_orig_mod`` sub-module.  This helper lets us load
+    such checkpoints into non-compiled models (and vice versa).
+    """
+    cleaned: dict[str, Any] = {}
+    for key, value in state_dict.items():
+        cleaned[key.replace("._orig_mod.", ".")] = value
+    return cleaned
+
+
 def checkpoint_path(checkpoint_dir: str | Path, step: int) -> Path:
     if step < 0:
         raise ValueError("step must be non-negative")
@@ -74,9 +87,9 @@ def load_checkpoint(
     replay_buffer: ReplayBuffer | None = None,
 ) -> dict[str, Any]:
     checkpoint = torch.load(Path(checkpoint_file), map_location=map_location, weights_only=False)
-    world_model.load_state_dict(checkpoint["world_model"])
-    actor.load_state_dict(checkpoint["actor"])
-    critic.load_state_dict(checkpoint["critic"])
+    world_model.load_state_dict(_strip_compiled_prefix(checkpoint["world_model"]))
+    actor.load_state_dict(_strip_compiled_prefix(checkpoint["actor"]))
+    critic.load_state_dict(_strip_compiled_prefix(checkpoint["critic"]))
     world_model_optimizer.load_state_dict(checkpoint["world_model_optimizer"])
     actor_optimizer.load_state_dict(checkpoint["actor_optimizer"])
     critic_optimizer.load_state_dict(checkpoint["critic_optimizer"])

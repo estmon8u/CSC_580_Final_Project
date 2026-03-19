@@ -131,10 +131,12 @@ def _load_models_from_checkpoint(
     device: torch.device,
 ) -> tuple[TinyWorldModel, Actor | DiscreteActor]:
     """Load world-model and actor weights from a saved checkpoint."""
+    from tiny_dreamer_highway.training.checkpointing import _strip_compiled_prefix
+
     world_model, actor, _critic = _build_models(config, device)
     checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=False)
-    world_model.load_state_dict(checkpoint["world_model"])
-    actor.load_state_dict(checkpoint["actor"])
+    world_model.load_state_dict(_strip_compiled_prefix(checkpoint["world_model"]))
+    actor.load_state_dict(_strip_compiled_prefix(checkpoint["actor"]))
     world_model.eval()
     actor.eval()
     return world_model, actor
