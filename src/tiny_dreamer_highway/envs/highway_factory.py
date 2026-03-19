@@ -236,6 +236,13 @@ def make_highway_env(config: EnvConfig):
 
     env = gym.make(config.env_id, render_mode="rgb_array")
     env.unwrapped.configure(build_highway_env_kwargs(config))
+    
+    # ---------------
+    # Force Highway-Env to physically build the Grayscale observation 
+    # objects and update its observation_space BEFORE we wrap it.
+    env.reset()
+    # ---------------
+    
     if config.npc_speed_scale < 1.0:
         env = NPCSpeedAdjustmentWrapper(env, config)
     if _should_apply_reward_wrapper(config):
