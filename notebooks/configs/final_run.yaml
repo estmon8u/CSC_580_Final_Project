@@ -5,24 +5,29 @@
 #
 # PRIMARY FINAL RUN CONFIG — Phase A: stable continuous-control training.
 #
-# Goal: produce a faster overtaking-capable agent without making steering so
-# cheap that the policy starts weaving. Key differences from the baseline:
-#   - 4 lanes (project requirement) with 28 vehicles (moderately hard,
-#     not overwhelming for learning)
-#   - high_speed_reward: 0.8 — stronger speed incentive without changing the
-#     steering costs that keep the policy stable
-#   - right_lane_reward: 0.0 — remove lane-hugging bias entirely
-#   - reward_speed_range: [24, 35] — makes moderate-speed following less rewarding
-#     while preserving the same upper-speed target
-#   - steering_penalty: 0.0075 — slightly relaxed, but not enough to invite wobble
-#   - steering_change_penalty: 0.02 — moderate steering smoothness penalty to
-#     reduce oscillation during lane changes
-#   - npc_speed_scale: 0.96 — tiny slowdown for non-ego traffic so overtakes
-#     appear a bit more often without changing the task qualitatively
-#   - max_episode_steps: 75 — more runway to accelerate after a pass
+# Iter 17 winning config (23-iteration tuning history).
+# Built from iter5 base + iter10 steering fix + Phase 3 anti-overfitting.
+#
+# Key tuning decisions and their rationale:
+#   - 4 lanes (project requirement) with 12 vehicles (sparser traffic so the
+#     agent can learn overtaking without constant collisions during warm-start)
+#   - frame_stack: 3 — gives the CNN instant velocity perception from pixel
+#     differences between stacked frames, critical for breaking trailing behavior
+#   - smoothing_factor: 0.5 — moderate action smoothing; lower values make
+#     the car too twitchy, higher values prevent lane changes
+#   - npc_speed_scale: 0.65 — slower NPC traffic creates more overtaking
+#     opportunities, breaking the "learned helplessness" trailing behavior
+#   - normalize_reward: false — raw rewards give the actor clearer gradients;
+#     normalization compressed the overtake bonus too much
+#   - steering_penalty: 0.025 — high enough to eliminate L/R jitter (iter 10
+#     finding) but allows occasional lane changes for overtaking
+#   - max_episode_steps: 120 — longer episodes feed diverse transitions into
+#     the replay buffer, preventing world-model overfitting past 500 cycles
+#   - batch_size: 384 — larger batches sample more diverse transitions per
+#     gradient update, further preventing overfitting
 #
 # All H100 AMP training settings are preserved:
-#   bfloat16 AMP, batch 256, 16x updates/cycle.
+#   bfloat16 AMP, batch 384, 16x updates/cycle.
 
 seed: 7
 device: cuda
@@ -30,11 +35,11 @@ env:
   env_id: highway-v0
   observation_height: 64
   observation_width: 64
-  frame_stack: 1
-  max_episode_steps: 75
+  frame_stack: 3
+  max_episode_steps: 120
   lanes_count: 4
-  vehicles_count: 28
-  npc_speed_scale: 0.85
+  vehicles_count: 12
+  npc_speed_scale: 0.65
   simulation_frequency: 15
   policy_frequency: 5
   action:
@@ -43,25 +48,25 @@ env:
     lateral: true
     longitudinal_scale: 0.7
     lateral_scale: 0.35
-    smoothing_factor: 0.6
+    smoothing_factor: 0.5
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
     high_speed_reward: 0.8
     lane_change_reward: 0.0
     overtake_reward: 2.5
-    normalize_reward: true
+    normalize_reward: false
     reward_speed_range: [26.0, 35.0]
     offroad_terminal: true
     offroad_penalty: 0.5
-    steering_penalty: 0.0075
+    steering_penalty: 0.025
     steering_change_penalty: 0.02
 replay:
   capacity: 500000
   sequence_length: 16
   batch_size: 256
 training:
-  batch_size: 256
+  batch_size: 384
   imagination_horizon: 20
   discount: 0.99
   lambda_: 0.95

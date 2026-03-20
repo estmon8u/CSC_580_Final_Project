@@ -19,9 +19,9 @@ from tiny_dreamer_highway.types import Transition
 
 def test_parser_accepts_show_config_subcommand() -> None:
     parser = build_parser()
-    args = parser.parse_args(["show-config", "--config", "examples/base_experiment.yaml"])
+    args = parser.parse_args(["show-config", "--config", "notebooks/configs/base_experiment.yaml"])
     assert args.command == "show-config"
-    assert args.config == Path("examples/base_experiment.yaml")
+    assert args.config == Path("notebooks/configs/base_experiment.yaml")
 
 
 def test_parser_requires_subcommand() -> None:
@@ -33,10 +33,10 @@ def test_parser_requires_subcommand() -> None:
 def test_parser_supports_collect_random() -> None:
     parser = build_parser()
     args = parser.parse_args(
-        ["collect-random", "--config", "examples/base_experiment.yaml", "--steps", "24"]
+        ["collect-random", "--config", "notebooks/configs/base_experiment.yaml", "--steps", "24"]
     )
     assert args.command == "collect-random"
-    assert args.config == Path("examples/base_experiment.yaml")
+    assert args.config == Path("notebooks/configs/base_experiment.yaml")
     assert args.steps == 24
 
 
@@ -46,7 +46,7 @@ def test_parser_supports_train_baseline() -> None:
         [
             "train-baseline",
             "--config",
-            "examples/base_experiment.yaml",
+            "notebooks/configs/base_experiment.yaml",
             "--artifact-root",
             "artifacts/local_run",
             "--cycles",
@@ -54,7 +54,7 @@ def test_parser_supports_train_baseline() -> None:
         ]
     )
     assert args.command == "train-baseline"
-    assert args.config == Path("examples/base_experiment.yaml")
+    assert args.config == Path("notebooks/configs/base_experiment.yaml")
     assert args.artifact_root == Path("artifacts/local_run")
     assert args.cycles == 12
 

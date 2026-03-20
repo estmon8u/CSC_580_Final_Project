@@ -3,21 +3,10 @@
 # Assignment: Final Project — Dream the Road
 # AI tools consulted: GitHub Copilot
 #
-# SHOWCASE EVALUATION CONFIG — Phase B: denser traffic, more lanes.
+# SHOWCASE EVALUATION — Iter 17 (Score-Optimized)
 #
-# This config is NOT used for training.  After a strong Phase-A checkpoint
-# is produced by final_run.yaml, pass this config to record_demo_videos()
-# so the same trained policy is demoed in a harder, more visually impressive
-# environment:
-#   - 6 lanes (wider road, more overtaking opportunities)
-#   - 45 vehicles (denser traffic, more interactions visible in GIF)
-#   - 60-step episodes (longer to show driving behaviour)
-#   - reward terms aligned with the training config so showcase episode
-#     statistics are comparable to Phase A after the balanced speed push
-#
-# The model architecture block is copied from final_run.yaml so the same
-# TinyWorldModel / Actor instances can be rebuilt before weight loading.
-# Only the env block is meaningfully different.
+# Phase B evaluation: same iter 17 weights evaluated in denser traffic.
+# 6 lanes, 45 vehicles. All other settings match final_run_iter17_score.yaml.
 
 seed: 7
 device: cuda
@@ -25,11 +14,11 @@ env:
   env_id: highway-v0
   observation_height: 64
   observation_width: 64
-  frame_stack: 1
-  max_episode_steps: 75
+  frame_stack: 3
+  max_episode_steps: 120
   lanes_count: 6
   vehicles_count: 45
-  npc_speed_scale: 0.85
+  npc_speed_scale: 0.65
   simulation_frequency: 15
   policy_frequency: 5
   action:
@@ -38,25 +27,25 @@ env:
     lateral: true
     longitudinal_scale: 0.7
     lateral_scale: 0.35
-    smoothing_factor: 0.6
+    smoothing_factor: 0.5
   reward:
     collision_reward: -1.0
     right_lane_reward: 0.0
     high_speed_reward: 0.8
     lane_change_reward: 0.0
     overtake_reward: 2.5
-    normalize_reward: true
+    normalize_reward: false
     reward_speed_range: [26.0, 35.0]
     offroad_terminal: true
     offroad_penalty: 0.5
-    steering_penalty: 0.0075
+    steering_penalty: 0.025
     steering_change_penalty: 0.02
 replay:
   capacity: 500000
   sequence_length: 16
   batch_size: 256
 training:
-  batch_size: 256
+  batch_size: 384
   imagination_horizon: 20
   discount: 0.99
   lambda_: 0.95
@@ -88,20 +77,3 @@ model:
   deterministic_dim: 200
   stochastic_dim: 30
   hidden_dim: 200
-  rssm_num_layers: 2
-  rssm_min_std: 0.1
-  actor_hidden_dim: 200
-  actor_num_layers: 2
-  actor_init_std: 1.0
-  actor_mean_scale: 5.0
-  actor_min_std: 0.0001
-  critic_hidden_dim: 200
-  critic_num_layers: 3
-  critic_distribution_std: 1.0
-  observation_distribution_std: 1.0
-  reward_hidden_dim: 200
-  reward_num_layers: 2
-  reward_distribution_std: 1.0
-  use_continue_model: true
-  continue_hidden_dim: 200
-  continue_num_layers: 2
