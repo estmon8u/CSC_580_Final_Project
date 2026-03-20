@@ -435,6 +435,7 @@ def run_training_cycle(
             lateral_scale=config.env.action.lateral_scale,
             smoothing_factor=config.env.action.smoothing_factor,
             lateral_control=config.env.action.lateral,
+            actor_entropy_weight=training_config.actor_entropy_weight,
             actor_scaler=actor_scaler,
             critic_scaler=critic_scaler,
             amp_context=amp_context,

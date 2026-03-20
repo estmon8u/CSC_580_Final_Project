@@ -224,6 +224,7 @@ def train_behavior_step(
     lateral_scale: float = 1.0,
     smoothing_factor: float = 0.0,
     lateral_control: bool = True,
+    actor_entropy_weight: float = 0.0,
     actor_scaler: torch.amp.GradScaler | None = None,
     critic_scaler: torch.amp.GradScaler | None = None,
     amp_context: torch.amp.autocast | None = None,
@@ -265,6 +266,12 @@ def train_behavior_step(
     # --- 2. Actor update: maximise imagined returns ---
     with frozen_params(critic):
         actor_loss = -weighted_mean(returns, weights)
+        if actor_entropy_weight > 0.0:
+            base_dist = actor.distribution(imagined.features)
+            entropy = base_dist.entropy()
+            actor_loss = actor_loss - actor_entropy_weight * weighted_mean(
+                entropy, weights.squeeze(-1)
+            )
     _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
 
     # --- 3. Critic update: fit value function to λ-returns ---
@@ -275,9 +282,12 @@ def train_behavior_step(
         critic_loss = -weighted_mean(critic_log_prob, weights.squeeze(-1).detach())
     _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
-    return {
+    metrics = {
         "actor_loss": float(actor_loss.detach().item()),
         "critic_loss": float(critic_loss.detach().item()),
         "imagined_reward_mean": float(imagined.rewards.detach().mean().item()),
         "imagined_value_mean": float(imagined.values.detach().mean().item()),
     }
+    if actor_entropy_weight > 0.0:
+        metrics["actor_entropy"] = float(entropy.detach().mean().item())
+    return metrics

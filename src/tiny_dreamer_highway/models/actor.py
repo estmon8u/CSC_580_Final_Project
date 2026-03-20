@@ -69,22 +69,33 @@ class Actor(nn.Module):
 
         apply_kaiming_init(self)
 
-    def forward(self, latent_features: Tensor) -> Tensor:
+    def _mean_std(self, latent_features: Tensor) -> tuple[Tensor, Tensor]:
+        """Shared mean/std computation for forward() and distribution()."""
         latent_features = latent_features.to(dtype=self._dtype_buf.dtype)
         raw = self.net(latent_features)
         mean, raw_std = raw.split(self.action_dim, dim=-1)
-
-        # Scale mean through tanh to bound it, then rescale
         mean = self.mean_scale * torch.tanh(mean / self.mean_scale)
-
-        # Wide initial std via init_std offset (softplus(raw + init_std))
         std = F.softplus(raw_std + self.init_std) + self.min_std
+        return mean, std
+
+    def forward(self, latent_features: Tensor) -> Tensor:
+        mean, std = self._mean_std(latent_features)
 
         if self.training:
-            # Reparameterised tanh-normal sample with Jacobian correction
             dist = Normal(mean, std)
             dist = Independent(dist, 1)
             dist = TransformedDistribution(dist, TanhTransform(cache_size=1))
             return dist.rsample()
         else:
             return torch.tanh(mean)
+
+    def distribution(self, latent_features: Tensor) -> Independent:
+        """Return the *base* Normal distribution (before tanh transform).
+
+        Used for entropy computation — ``TransformedDistribution`` with
+        ``TanhTransform`` does not support ``.entropy()``, so we return
+        the untransformed ``Independent(Normal(...), 1)`` whose entropy
+        is an upper-bound proxy that is analytically tractable.
+        """
+        mean, std = self._mean_std(latent_features)
+        return Independent(Normal(mean, std), 1)

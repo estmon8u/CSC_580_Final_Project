@@ -97,6 +97,7 @@ class TrainingConfig(BaseModel):
     use_amp: bool = False
     amp_dtype: Literal["bfloat16", "float16"] = "bfloat16"
     deterministic_torch: bool = True
+    actor_entropy_weight: float = Field(default=0.0, ge=0.0, le=1.0)
     world_model_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     behavior_updates_per_cycle: int = Field(default=1, ge=1, le=256)
     cycles: int = Field(default=10, ge=1, le=1_000_000)
