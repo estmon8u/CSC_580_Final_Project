@@ -58,7 +58,7 @@ def test_collect_actor_transitions_adds_policy_steps(monkeypatch) -> None:
     replay_buffer = ReplayBuffer(capacity=32)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
 
@@ -87,7 +87,7 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
     replay_buffer = ReplayBuffer(capacity=128)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -166,7 +166,7 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
     replay_buffer = ReplayBuffer(capacity=128)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -287,7 +287,7 @@ def test_world_model_training_consumes_next_observations_not_observations(monkey
 
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -393,7 +393,7 @@ def test_run_training_cycle_auto_tops_up_random_data_until_sequences_exist(monke
     replay_buffer = ReplayBuffer(capacity=128)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -463,7 +463,7 @@ def test_run_training_cycle_rejects_impossible_sequence_length(monkeypatch) -> N
     replay_buffer = ReplayBuffer(capacity=32)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)

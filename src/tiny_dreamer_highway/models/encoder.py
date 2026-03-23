@@ -32,8 +32,11 @@ class LatentState:
         embedding:     CNN encoder output ``e_t``, shape ``(B, embedding_dim)``.
         deterministic: GRU hidden state ``h_t``, shape ``(B, deterministic_dim)``.
         stochastic:    Sampled stochastic state ``s_t``, shape ``(B, stochastic_dim)``.
-        dist_mean:     Mean of the Gaussian distribution over ``s_t``.
-        dist_std:      Std of the Gaussian distribution over ``s_t``.
+                       For categoricals: flattened one-hot ``(B, num_cat * num_classes)``.
+        logits:        Raw categorical logits, shape ``(B, num_cat, num_classes)``.
+                       ``None`` for Gaussian mode (V1 legacy).
+        dist_mean:     Mean of the Gaussian distribution over ``s_t`` (V1 legacy).
+        dist_std:      Std of the Gaussian distribution over ``s_t`` (V1 legacy).
 
     The ``features`` property returns the concatenated latent feature
     vector ``[s_t ; h_t]`` used by all downstream heads (decoder,
@@ -43,6 +46,7 @@ class LatentState:
     embedding: Tensor | None = None
     deterministic: Tensor | None = None
     stochastic: Tensor | None = None
+    logits: Tensor | None = None
     dist_mean: Tensor | None = None
     dist_std: Tensor | None = None
 

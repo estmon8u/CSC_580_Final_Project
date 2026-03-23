@@ -32,7 +32,7 @@ def test_compute_frame_metrics_includes_nll_when_std_provided() -> None:
 def test_rollout_imagined_observations_returns_expected_shape() -> None:
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     seed_observation = torch.randint(0, 256, (3, 1, 64, 64), dtype=torch.uint8)
     future_actions = torch.randn(3, 4, 2)
@@ -45,7 +45,7 @@ def test_rollout_imagined_observations_returns_expected_shape() -> None:
 def test_evaluate_n_step_predictions_returns_per_step_metrics_and_summary() -> None:
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     seed_observation = torch.randint(0, 256, (2, 1, 64, 64), dtype=torch.uint8)
     future_actions = torch.randn(2, 3, 2)
@@ -67,7 +67,7 @@ def test_evaluate_n_step_predictions_returns_per_step_metrics_and_summary() -> N
 def test_evaluate_latent_rollout_consistency_returns_drift_summary() -> None:
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     seed_observation = torch.randint(0, 256, (2, 1, 64, 64), dtype=torch.uint8)
     future_actions = torch.randn(2, 3, 2)

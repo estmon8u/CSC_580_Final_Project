@@ -38,8 +38,8 @@ from tiny_dreamer_highway.training.experiment import (
 	resolve_training_device,
 )
 from tiny_dreamer_highway.training.world_model_step import (
+	categorical_kl_divergence,
 	compute_world_model_losses,
-	gaussian_kl_divergence,
 	train_world_model_step,
 )
 from tiny_dreamer_highway.training.sequence_world_model_step import (
@@ -56,7 +56,7 @@ __all__ = [
 	"collect_actor_transitions",
 	"compute_sequence_world_model_losses",
 	"compute_world_model_losses",
-	"gaussian_kl_divergence",
+	"categorical_kl_divergence",
 	"append_metrics_csv",
 	"append_metrics_jsonl",
 	"export_cycle_metrics",

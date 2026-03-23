@@ -87,7 +87,7 @@ def _create_models():
         action_dim=2,
         embedding_dim=256,
         deterministic_dim=128,
-        stochastic_dim=32,
+        num_categoricals=4, num_classes=8,
         hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)

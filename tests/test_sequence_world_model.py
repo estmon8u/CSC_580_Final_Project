@@ -57,7 +57,7 @@ def test_stack_sequence_batch_preserves_terminal_and_truncation_flags() -> None:
 def test_compute_sequence_world_model_losses_returns_outputs_per_step() -> None:
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     observations = torch.randint(0, 256, (2, 3, 1, 64, 64), dtype=torch.uint8)
     actions = torch.randn(2, 3, 2)
@@ -95,7 +95,7 @@ def test_train_sequence_world_model_step_updates_parameters() -> None:
     torch.manual_seed(7)
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     observations = torch.randint(0, 256, (2, 4, 1, 64, 64), dtype=torch.uint8)

@@ -18,20 +18,18 @@ from tiny_dreamer_highway.training.sequence_world_model_step import (
 )
 from tiny_dreamer_highway.training.world_model_step import (
     compute_world_model_losses,
-    gaussian_kl_divergence,
+    categorical_kl_divergence,
 )
 
 
 # ── _compute_vectorized_losses matches single-step formula ───────────
 
 def test_vectorized_kl_matches_analytic() -> None:
-    """Vectorized KL uses the same formula as gaussian_kl_divergence."""
-    B, T, D = 2, 3, 4
+    """Vectorized KL uses the same formula as categorical_kl_divergence."""
+    B, T, num_cat, num_cls = 2, 3, 4, 8
     torch.manual_seed(42)
-    post_means = torch.randn(B, T, D)
-    post_stds = torch.rand(B, T, D) + 0.1
-    prior_means = torch.randn(B, T, D)
-    prior_stds = torch.rand(B, T, D) + 0.1
+    post_logits = torch.randn(B, T, num_cat, num_cls)
+    prior_logits = torch.randn(B, T, num_cat, num_cls)
 
     # Vectorized path
     losses = _compute_vectorized_losses(
@@ -40,10 +38,8 @@ def test_vectorized_kl_matches_analytic() -> None:
         reconstructions=torch.randn(B, T, 1, 64, 64),
         predicted_rewards=torch.randn(B, T, 1),
         predicted_continues=None,
-        post_means=post_means,
-        post_stds=post_stds,
-        prior_means=prior_means,
-        prior_stds=prior_stds,
+        post_logits=post_logits,
+        prior_logits=prior_logits,
         terminal_targets=None,
         free_nats=0.0,
         continue_loss_weight=1.0,
@@ -52,12 +48,10 @@ def test_vectorized_kl_matches_analytic() -> None:
     )
 
     # Analytic path (flatten B*T, then compute)
-    flat_post_mean = post_means.reshape(B * T, D)
-    flat_post_std = post_stds.reshape(B * T, D)
-    flat_prior_mean = prior_means.reshape(B * T, D)
-    flat_prior_std = prior_stds.reshape(B * T, D)
-    analytic_kl = gaussian_kl_divergence(
-        flat_post_mean, flat_post_std, flat_prior_mean, flat_prior_std
+    flat_post_logits = post_logits.reshape(B * T, num_cat, num_cls)
+    flat_prior_logits = prior_logits.reshape(B * T, num_cat, num_cls)
+    analytic_kl = categorical_kl_divergence(
+        flat_post_logits, flat_prior_logits
     )
 
     assert torch.allclose(losses["kl_loss_raw"], analytic_kl, atol=1e-5)
@@ -76,10 +70,8 @@ def test_vectorized_reward_loss_matches_manual() -> None:
         reconstructions=torch.zeros(B, T, 1, 64, 64),
         predicted_rewards=pred_reward,
         predicted_continues=None,
-        post_means=torch.zeros(B, T, 4),
-        post_stds=torch.ones(B, T, 4),
-        prior_means=torch.zeros(B, T, 4),
-        prior_stds=torch.ones(B, T, 4),
+        post_logits=torch.zeros(B, T, 4, 8),
+        prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=0.0,
         continue_loss_weight=1.0,
@@ -104,10 +96,8 @@ def test_vectorized_reconstruction_mse() -> None:
         reconstructions=recon,
         predicted_rewards=torch.zeros(B, T, 1),
         predicted_continues=None,
-        post_means=torch.zeros(B, T, 4),
-        post_stds=torch.ones(B, T, 4),
-        prior_means=torch.zeros(B, T, 4),
-        prior_stds=torch.ones(B, T, 4),
+        post_logits=torch.zeros(B, T, 4, 8),
+        prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=0.0,
         continue_loss_weight=1.0,
@@ -130,10 +120,8 @@ def test_vectorized_free_nats_clamping() -> None:
         predicted_rewards=torch.zeros(B, T, 1),
         predicted_continues=None,
         # Same distributions → KL ≈ 0
-        post_means=torch.zeros(B, T, D),
-        post_stds=torch.ones(B, T, D),
-        prior_means=torch.zeros(B, T, D),
-        prior_stds=torch.ones(B, T, D),
+        post_logits=torch.zeros(B, T, 4, 8),
+        prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=3.0,
         continue_loss_weight=1.0,
@@ -157,10 +145,8 @@ def test_vectorized_continue_loss_matches_bce() -> None:
         reconstructions=torch.zeros(B, T, 1, 64, 64),
         predicted_rewards=torch.zeros(B, T, 1),
         predicted_continues=logits,
-        post_means=torch.zeros(B, T, 4),
-        post_stds=torch.ones(B, T, 4),
-        prior_means=torch.zeros(B, T, 4),
-        prior_stds=torch.ones(B, T, 4),
+        post_logits=torch.zeros(B, T, 4, 8),
+        prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=terminals,
         free_nats=0.0,
         continue_loss_weight=1.0,
@@ -179,7 +165,8 @@ def test_sequence_forward_losses_are_finite() -> None:
     torch.manual_seed(42)
     wm = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=64, deterministic_dim=32, stochastic_dim=8,
+        embedding_dim=64, deterministic_dim=32,
+        num_categoricals=4, num_classes=8,
         hidden_dim=32, rssm_num_layers=1,
         reward_hidden_dim=32, reward_num_layers=1,
     )
@@ -207,14 +194,12 @@ def test_overshooting_zero_horizon_returns_zeros() -> None:
         prior_state=LatentState(
             deterministic=torch.zeros(1, 16),
             stochastic=torch.zeros(1, 8),
-            dist_mean=torch.zeros(1, 8),
-            dist_std=torch.ones(1, 8),
+            logits=torch.zeros(1, 4, 2),
         ),
         posterior_state=LatentState(
             deterministic=torch.zeros(1, 16),
             stochastic=torch.zeros(1, 8),
-            dist_mean=torch.zeros(1, 8),
-            dist_std=torch.ones(1, 8),
+            logits=torch.zeros(1, 4, 2),
         ),
         reconstruction=torch.zeros(1, 1, 64, 64),
         predicted_reward=torch.zeros(1, 1),
@@ -222,7 +207,7 @@ def test_overshooting_zero_horizon_returns_zeros() -> None:
     torch.manual_seed(42)
     wm = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=64, deterministic_dim=16, stochastic_dim=8,
+        embedding_dim=64, deterministic_dim=16, num_categoricals=4, num_classes=2,
         hidden_dim=16, rssm_num_layers=1,
         reward_hidden_dim=16, reward_num_layers=1,
     )
@@ -243,7 +228,8 @@ def test_overshooting_pair_count() -> None:
     torch.manual_seed(42)
     wm = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=64, deterministic_dim=16, stochastic_dim=8,
+        embedding_dim=64, deterministic_dim=16,
+        num_categoricals=4, num_classes=8,
         hidden_dim=16, rssm_num_layers=1,
         reward_hidden_dim=16, reward_num_layers=1,
     )

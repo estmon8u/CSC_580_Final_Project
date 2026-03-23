@@ -1,14 +1,11 @@
 """Deterministic mathematical tests for RecurrentStateSpaceModel.
 
-Verifies exact numerics: softplus+min_std distribution parameters,
-reparameterised sampling, GRU deterministic state transitions,
-initial state zeros, and prior vs posterior divergence.
+Verifies categorical sampling, straight-through gradients, GRU
+deterministic state transitions, initial state zeros, and
+prior vs posterior divergence.
 """
 
-import math
-
 import torch
-import torch.nn.functional as F
 
 from tiny_dreamer_highway.models.encoder import LatentState
 from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
@@ -17,94 +14,42 @@ from tiny_dreamer_highway.models.rssm import RecurrentStateSpaceModel
 def _make_rssm(seed: int = 42, **kwargs) -> RecurrentStateSpaceModel:
     defaults = dict(
         action_dim=2, embedding_dim=64, deterministic_dim=32,
-        stochastic_dim=8, hidden_dim=32, min_std=0.1, num_layers=1,
+        num_categoricals=4, num_classes=8, hidden_dim=32, num_layers=1,
     )
     defaults.update(kwargs)
     torch.manual_seed(seed)
     return RecurrentStateSpaceModel(**defaults)
 
 
-# ── distribution_parameters ──────────────────────────────────────────
+# ── categorical sampling ─────────────────────────────────────────────
 
-def test_distribution_parameters_softplus_plus_min_std() -> None:
-    """std = softplus(raw_std) + min_std.
-
-    softplus(0) = ln(2) ≈ 0.6931
-    so std(raw=0) = ln(2) + 0.1 ≈ 0.7931
-    """
-    rssm = _make_rssm(min_std=0.1)
-    # 16 dims = 8 mean + 8 std (stochastic_dim=8)
-    stats = torch.zeros(1, 16)  # all zeros → raw_std = 0 for std half
-    mean, std = rssm._distribution_parameters(stats)
-
-    assert mean.shape == (1, 8)
-    assert std.shape == (1, 8)
-    assert torch.allclose(mean, torch.zeros(1, 8))
-
-    expected_std = math.log(2.0) + 0.1  # ≈ 0.7931
-    assert torch.allclose(std, torch.full((1, 8), expected_std), atol=1e-5)
-
-
-def test_distribution_parameters_large_raw_std_saturates() -> None:
-    """softplus(x) ≈ x for large x, so std ≈ x + min_std."""
-    rssm = _make_rssm(min_std=0.1)
-    stats = torch.zeros(1, 16)
-    stats[0, 8:] = 10.0  # large raw_std
-
-    _, std = rssm._distribution_parameters(stats)
-
-    # softplus(10) ≈ 10.0000 (saturated), so std ≈ 10.1
-    expected = F.softplus(torch.tensor(10.0)) + 0.1
-    assert torch.allclose(std, torch.full((1, 8), expected.item()), atol=1e-4)
-
-
-def test_distribution_parameters_negative_raw_std() -> None:
-    """softplus(-5) is small, so std ≈ softplus(-5) + min_std."""
-    rssm = _make_rssm(min_std=0.1)
-    stats = torch.zeros(1, 16)
-    stats[0, 8:] = -5.0
-
-    _, std = rssm._distribution_parameters(stats)
-
-    expected = F.softplus(torch.tensor(-5.0)) + 0.1
-    assert torch.allclose(std, torch.full((1, 8), expected.item()), atol=1e-5)
-
-
-def test_distribution_parameters_preserves_mean_exactly() -> None:
-    """mean is the first half of stats, unchanged."""
+def test_sample_categorical_returns_correct_shape() -> None:
+    """Straight-through sample produces flattened one-hot of expected size."""
     rssm = _make_rssm()
-    stats = torch.randn(3, 16)
-    mean, _ = rssm._distribution_parameters(stats)
+    logits = torch.randn(3, 4, 8)  # (B, num_cat, num_cls)
+    result = rssm._sample_categorical(logits)
+    assert result.shape == (3, 32)  # 4 * 8 = 32
 
-    assert torch.equal(mean, stats[:, :8])
 
-
-# ── sample_stochastic (reparameterisation trick) ─────────────────────
-
-def test_sample_stochastic_reproduces_with_seed() -> None:
-    """z = mean + std * noise, deterministic with fixed seed."""
+def test_sample_categorical_is_approximately_one_hot() -> None:
+    """Each categorical block should be approximately one-hot (hard sample forward)."""
     rssm = _make_rssm()
-    mean = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]])
-    std = torch.tensor([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]])
-
-    torch.manual_seed(99)
-    noise = torch.randn_like(mean)
-    expected = mean + std * noise
-
-    torch.manual_seed(99)
-    result = rssm._sample_stochastic(mean, std)
-
-    assert torch.allclose(result, expected, atol=1e-6)
+    logits = torch.randn(2, 4, 8)
+    result = rssm._sample_categorical(logits)
+    reshaped = result.reshape(2, 4, 8)
+    # Each block should sum to ~1.0 (straight-through adds soft correction)
+    sums = reshaped.sum(dim=-1)
+    assert torch.allclose(sums, torch.ones_like(sums), atol=1e-5)
 
 
-def test_sample_stochastic_zero_std_returns_mean() -> None:
-    """With std=0, sampling returns mean exactly (no noise contribution)."""
+def test_sample_categorical_has_gradients() -> None:
+    """Straight-through estimator should allow gradient flow."""
     rssm = _make_rssm()
-    mean = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]])
-    std = torch.zeros_like(mean)
-
-    result = rssm._sample_stochastic(mean, std)
-    assert torch.equal(result, mean)
+    logits = torch.randn(2, 4, 8, requires_grad=True)
+    result = rssm._sample_categorical(logits)
+    result.sum().backward()
+    assert logits.grad is not None
+    assert logits.grad.shape == (2, 4, 8)
 
 
 # ── initial_state ────────────────────────────────────────────────────
@@ -114,7 +59,7 @@ def test_initial_state_is_all_zeros() -> None:
     state = rssm.initial_state(batch_size=4)
 
     assert torch.equal(state.deterministic, torch.zeros(4, 32))
-    assert torch.equal(state.stochastic, torch.zeros(4, 8))
+    assert torch.equal(state.stochastic, torch.zeros(4, 32))  # 4 * 8 = 32
 
 
 def test_initial_state_has_correct_dtype() -> None:
@@ -131,7 +76,7 @@ def test_imagine_step_is_deterministic_with_seed() -> None:
     """Same seed → identical prior rollout."""
     state = LatentState(
         deterministic=torch.zeros(1, 32),
-        stochastic=torch.zeros(1, 8),
+        stochastic=torch.zeros(1, 32),  # 4 * 8 = 32
     )
     action = torch.zeros(1, 2)
 
@@ -147,8 +92,7 @@ def test_imagine_step_is_deterministic_with_seed() -> None:
 
     assert torch.equal(out1.deterministic, out2.deterministic)
     assert torch.equal(out1.stochastic, out2.stochastic)
-    assert torch.equal(out1.dist_mean, out2.dist_mean)
-    assert torch.equal(out1.dist_std, out2.dist_std)
+    assert torch.equal(out1.logits, out2.logits)
 
 
 def test_imagine_step_output_shapes() -> None:
@@ -159,19 +103,18 @@ def test_imagine_step_output_shapes() -> None:
     out = rssm.imagine_step(state, action)
 
     assert out.deterministic.shape == (3, 32)
-    assert out.stochastic.shape == (3, 8)
-    assert out.dist_mean.shape == (3, 8)
-    assert out.dist_std.shape == (3, 8)
+    assert out.stochastic.shape == (3, 32)  # 4 * 8 = 32
+    assert out.logits.shape == (3, 4, 8)
 
 
-def test_imagine_step_std_is_at_least_min_std() -> None:
-    """Prior std is always >= min_std due to softplus + min_std floor."""
-    rssm = _make_rssm(min_std=0.1)
+def test_imagine_step_logits_are_finite() -> None:
+    """Prior logits should always be finite."""
+    rssm = _make_rssm()
     state = rssm.initial_state(batch_size=5)
     action = torch.randn(5, 2)
 
     out = rssm.imagine_step(state, action)
-    assert torch.all(out.dist_std >= 0.1)
+    assert torch.all(torch.isfinite(out.logits))
 
 
 # ── observe_step (posterior) ─────────────────────────────────────────
@@ -191,8 +134,8 @@ def test_observe_step_differs_from_imagine_step() -> None:
 
     # Deterministic state is the same (same GRU computation)
     assert torch.allclose(prior.deterministic, posterior.deterministic, atol=1e-6)
-    # But stochastic state differs because posterior uses embedding
-    assert not torch.allclose(prior.stochastic, posterior.stochastic)
+    # But logits differ because posterior uses embedding
+    assert not torch.allclose(prior.logits, posterior.logits)
 
 
 def test_observe_step_stores_embedding() -> None:
@@ -252,7 +195,8 @@ def test_latent_state_features_concatenation_order() -> None:
 
 def test_latent_state_features_dim_equals_sum() -> None:
     """features dim = stochastic_dim + deterministic_dim."""
-    rssm = _make_rssm(deterministic_dim=32, stochastic_dim=8)
+    rssm = _make_rssm(deterministic_dim=32, num_categoricals=4, num_classes=8)
     state = rssm.initial_state(batch_size=1)
 
-    assert state.features.shape[-1] == 32 + 8
+    # stochastic_dim = 4 * 8 = 32, deterministic_dim = 32 → total = 64
+    assert state.features.shape[-1] == 32 + 32

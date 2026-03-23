@@ -34,7 +34,7 @@ from torch import Tensor
 
 from tiny_dreamer_highway.models import TinyWorldModel
 from tiny_dreamer_highway.models.encoder import LatentState
-from tiny_dreamer_highway.training.world_model_step import gaussian_kl_divergence
+from tiny_dreamer_highway.training.world_model_step import categorical_kl_divergence
 
 
 def _normalize_observations(observations: Tensor, dtype: torch.dtype) -> Tensor:
@@ -305,11 +305,9 @@ def evaluate_latent_rollout_consistency(
                 (imagined_state.stochastic - grounded_state.stochastic) ** 2
             ).item()
             feature_mse = torch.mean((imagined_state.features - grounded_state.features) ** 2).item()
-            prior_posterior_kl = gaussian_kl_divergence(
-                grounded_state.dist_mean,
-                grounded_state.dist_std,
-                imagined_state.dist_mean,
-                imagined_state.dist_std,
+            prior_posterior_kl = categorical_kl_divergence(
+                grounded_state.logits,
+                imagined_state.logits,
             ).item()
             step_metrics.append(
                 {

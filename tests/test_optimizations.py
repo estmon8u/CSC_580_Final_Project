@@ -31,7 +31,7 @@ def test_world_model_step_clips_gradients() -> None:
     torch.manual_seed(7)
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
@@ -58,7 +58,7 @@ def test_behavior_step_clips_gradients() -> None:
     torch.manual_seed(7)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -81,7 +81,7 @@ def test_grad_clip_norm_actually_limits_gradient_magnitude() -> None:
     torch.manual_seed(7)
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
 
     # Forward + backward to get large gradients
@@ -244,7 +244,7 @@ def test_grad_clip_norm_passed_through_pipeline(monkeypatch) -> None:
 
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -325,7 +325,7 @@ def test_world_model_step_accepts_amp_args() -> None:
     torch.manual_seed(7)
     model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     observations = torch.randint(0, 255, (4, 1, 64, 64), dtype=torch.uint8)
@@ -345,7 +345,7 @@ def test_behavior_step_accepts_amp_args() -> None:
     torch.manual_seed(7)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)

@@ -43,7 +43,7 @@ from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOu
 from tiny_dreamer_highway.training.world_model_step import (
     _backward_and_step,
     compute_world_model_losses,
-    gaussian_kl_divergence,
+    categorical_kl_divergence,
 )
 from tiny_dreamer_highway.types import ReplaySequenceBatch, Transition
 
@@ -54,10 +54,8 @@ def _compute_vectorized_losses(
     reconstructions: Tensor,
     predicted_rewards: Tensor,
     predicted_continues: Tensor | None,
-    post_means: Tensor,
-    post_stds: Tensor,
-    prior_means: Tensor,
-    prior_stds: Tensor,
+    post_logits: Tensor,
+    prior_logits: Tensor,
     *,
     terminal_targets: Tensor | None,
     free_nats: float,
@@ -161,16 +159,11 @@ def _compute_vectorized_losses(
             predicted_continues, continue_targets,
         )
 
-    # ── KL divergence (analytic Gaussian KL) ─────────────────────────
+    # ── KL divergence (categorical KL, DreamerV2) ────────────────
     # KL( q(s_t|h_t,e_t) || p(s_t|h_t) )  —  pushes the prior toward
     # the posterior so that imagination rollouts (which only use the
-    # prior) remain accurate.  Computed analytically for diagonal
-    # Gaussians:  KL = 0.5 * Σ (σ_q²/σ_p² + (μ_p-μ_q)²/σ_p² - 1 - log(σ_q²/σ_p²))
-    var_ratio = (post_stds / prior_stds).pow(2)
-    mean_diff = ((prior_means - post_means) / prior_stds).pow(2)
-    kl_per_dim = 0.5 * (var_ratio + mean_diff - 1.0 - var_ratio.log())
-
-    raw_kl = kl_per_dim.sum(dim=-1).mean()  # sum over stoch_dim, mean over (B, T)
+    # prior) remain accurate.
+    raw_kl = categorical_kl_divergence(post_logits, prior_logits)
     # Free-nats: don’t penalize KL below this threshold so the model can
     # first learn useful latent representations before being compressed.
     kl_loss = torch.clamp(raw_kl, min=free_nats)
@@ -254,10 +247,8 @@ def compute_latent_overshooting_losses(
         for offset, imagined_state in enumerate(imagined_states, start=1):
             target_state = outputs[start_index + offset].posterior_state
             if (
-                imagined_state.dist_mean is None
-                or imagined_state.dist_std is None
-                or target_state.dist_mean is None
-                or target_state.dist_std is None
+                imagined_state.logits is None
+                or target_state.logits is None
                 or target_state.deterministic is None
                 or target_state.stochastic is None
             ):
@@ -265,11 +256,9 @@ def compute_latent_overshooting_losses(
 
             # Compare imagined distribution against the actual posterior
             # (detached so the posterior is treated as a fixed target).
-            kl_total = kl_total + gaussian_kl_divergence(
-                target_state.dist_mean.detach(),
-                target_state.dist_std.detach(),
-                imagined_state.dist_mean,
-                imagined_state.dist_std,
+            kl_total = kl_total + categorical_kl_divergence(
+                target_state.logits.detach(),
+                imagined_state.logits,
             )
 
             # Also penalize the concatenated latent feature [h;s] directly
@@ -425,12 +414,10 @@ def compute_sequence_world_model_losses(
     )
 
     # ── 4. Extract Stacked Distributions for Loss ─────────────────────
-    # Stack posterior and prior Gaussian parameters into (B, T, stoch_dim)
+    # Stack posterior and prior categorical logits into (B, T, num_cat, num_cls)
     # tensors for vectorized KL computation.
-    post_means = torch.stack([s.dist_mean for s in posterior_states], dim=1)
-    post_stds = torch.stack([s.dist_std for s in posterior_states], dim=1)
-    prior_means = torch.stack([s.dist_mean for s in prior_states], dim=1)
-    prior_stds = torch.stack([s.dist_std for s in prior_states], dim=1)
+    post_logits = torch.stack([s.logits for s in posterior_states], dim=1)
+    prior_logits = torch.stack([s.logits for s in prior_states], dim=1)
 
     # ── 5. Safe, Explicit Vectorized Loss Math (No Re-stacking) ───────
     losses = _compute_vectorized_losses(
@@ -439,10 +426,8 @@ def compute_sequence_world_model_losses(
         reconstructions=reconstructions,
         predicted_rewards=predicted_rewards,
         predicted_continues=predicted_continues,
-        post_means=post_means,
-        post_stds=post_stds,
-        prior_means=prior_means,
-        prior_stds=prior_stds,
+        post_logits=post_logits,
+        prior_logits=prior_logits,
         terminal_targets=terminal_targets,
         free_nats=free_nats,
         continue_loss_weight=continue_loss_weight,

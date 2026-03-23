@@ -1,11 +1,13 @@
-"""Recurrent State-Space Model (RSSM) — the latent dynamics core of DreamerV1.
+"""Recurrent State-Space Model (RSSM) — DreamerV2 categorical latent dynamics.
 
 The RSSM maintains a two-part latent state at every time step:
 
 * **Deterministic state** (``h_t``): carries long-term memory through a
   GRU cell.  Shape: ``(B, deterministic_dim)``.
-* **Stochastic state** (``s_t``): captures per-step uncertainty via a
-  learned diagonal Gaussian.  Shape: ``(B, stochastic_dim)``.
+* **Stochastic state** (``s_t``): captures per-step uncertainty via
+  ``num_categoricals`` independent categorical distributions, each with
+  ``num_classes`` classes.  Represented as a flattened one-hot vector
+  of shape ``(B, num_categoricals * num_classes)``.
 
 Two distributions are defined over ``s_t``:
 
@@ -17,12 +19,12 @@ Two distributions are defined over ``s_t``:
    accurate latent state that the prior is trained to match (via KL
    divergence).
 
-The concatenation ``[h_t ; s_t]`` is called the *latent feature vector*
-and is consumed by the decoder, reward predictor, continue predictor,
-actor, and critic.
+Sampling uses the straight-through gradient estimator: a hard one-hot
+sample in the forward pass with gradients flowing through the softmax
+logits in the backward pass.
 
-Reference: Hafner et al., "Dream to Control: Learning Behaviors by
-Latent Imagination" (ICLR 2020), Section 2 — Latent Dynamics.
+Reference: Hafner et al., "Mastering Atari with Discrete World Models"
+(ICLR 2021) — DreamerV2.
 
 Name: Esteban Montelongo
 Course: CSC 580 AI 2
@@ -39,7 +41,7 @@ from tiny_dreamer_highway.models.encoder import LatentState
 
 
 class RecurrentStateSpaceModel(nn.Module):
-    """GRU-backed recurrent state-space model for DreamerV1.
+    """GRU-backed recurrent state-space model with categorical latent state (DreamerV2).
 
     The forward dynamics are:
 
@@ -47,21 +49,21 @@ class RecurrentStateSpaceModel(nn.Module):
        action ``a_{t-1}`` and project through a small MLP (``input_layer``).
     2. Feed the projection into the GRU to obtain the new deterministic
        state ``h_t``.
-    3. Compute a Gaussian distribution over ``s_t``:
+    3. Compute a categorical distribution over ``s_t``:
        - **Prior**: ``p(s_t | h_t)`` — uses ``prior_model``.
        - **Posterior**: ``q(s_t | h_t, e_t)`` — uses ``posterior_model``,
          where ``e_t`` is the CNN embedding of the observation.
-    4. Sample ``s_t`` via the reparameterization trick so gradients
-       flow through sampling.
+    4. Sample ``s_t`` via straight-through gradients: hard one-hot forward,
+       soft logits backward.
 
     Args:
         action_dim:       Dimensionality of the (one-hot or continuous) action.
         embedding_dim:    Dimensionality of the CNN encoder output ``e_t``.
         deterministic_dim: Width of the GRU hidden state ``h_t``.
-        stochastic_dim:   Width of the stochastic state ``s_t``.
+        num_categoricals: Number of independent categorical distributions.
+        num_classes:      Number of classes per categorical distribution.
         hidden_dim:       Width of the hidden layers in the prior/posterior MLPs.
-        min_std:          Floor on the predicted standard deviation to avoid
-                          posterior collapse.
+        min_std:          Unused (kept for config compatibility).
         num_layers:       Number of hidden layers in the prior/posterior MLPs.
     """
 
@@ -70,10 +72,13 @@ class RecurrentStateSpaceModel(nn.Module):
         action_dim: int,
         embedding_dim: int,
         deterministic_dim: int = 200,
-        stochastic_dim: int = 30,
+        num_categoricals: int = 32,
+        num_classes: int = 32,
         hidden_dim: int = 200,
         min_std: float = 0.1,
         num_layers: int = 2,
+        # Legacy alias — ignored when num_categoricals/num_classes are set
+        stochastic_dim: int | None = None,
     ) -> None:
         super().__init__()
         if action_dim <= 0:
@@ -82,35 +87,34 @@ class RecurrentStateSpaceModel(nn.Module):
             raise ValueError("embedding_dim must be positive")
         if deterministic_dim <= 0:
             raise ValueError("deterministic_dim must be positive")
-        if stochastic_dim <= 0:
-            raise ValueError("stochastic_dim must be positive")
 
         self.action_dim = action_dim
         self.embedding_dim = embedding_dim
         self.deterministic_dim = deterministic_dim
-        self.stochastic_dim = stochastic_dim
+        self.num_categoricals = num_categoricals
+        self.num_classes = num_classes
+        self.stochastic_dim = num_categoricals * num_classes
         self.hidden_dim = hidden_dim
         self.min_std = min_std
 
         # ── Input projection: [s_{t-1} ; a_{t-1}] → hidden_dim ────────
         self.input_layer = nn.Sequential(
-            nn.Linear(action_dim + stochastic_dim, hidden_dim),
+            nn.Linear(action_dim + self.stochastic_dim, hidden_dim),
             nn.ELU(),
         )
 
         # ── Deterministic backbone ──────────────────────────────────────
         self.gru = nn.GRUCell(hidden_dim, deterministic_dim)
 
-        # ── Prior p(s_t | h_t): predicts stochastic state without obs ──
-        # Output is 2·stochastic_dim: first half = mean, second half =
-        # pre-softplus std parameter.
+        # ── Prior p(s_t | h_t): predicts categorical logits ────────────
+        # Output is num_categoricals * num_classes raw logits.
         self.prior_model = self._build_fc_network(
-            deterministic_dim, hidden_dim, 2 * stochastic_dim, num_layers,
+            deterministic_dim, hidden_dim, self.stochastic_dim, num_layers,
         )
 
         # ── Posterior q(s_t | h_t, e_t): refines with observation ───────
         self.posterior_model = self._build_fc_network(
-            deterministic_dim + embedding_dim, hidden_dim, 2 * stochastic_dim, num_layers,
+            deterministic_dim + embedding_dim, hidden_dim, self.stochastic_dim, num_layers,
         )
 
         # Lightweight buffer used solely to track the module's current dtype
@@ -152,27 +156,31 @@ class RecurrentStateSpaceModel(nn.Module):
         stochastic = torch.zeros(batch_size, self.stochastic_dim, device=device, dtype=_dt)
         return LatentState(deterministic=deterministic, stochastic=stochastic)
 
-    def _distribution_parameters(self, stats: Tensor) -> tuple[Tensor, Tensor]:
-        """Split raw network output into Gaussian mean and std.
+    def _compute_logits(self, raw_output: Tensor) -> Tensor:
+        """Reshape network output to ``(B, num_categoricals, num_classes)`` logits."""
+        return raw_output.reshape(-1, self.num_categoricals, self.num_classes)
 
-        The network outputs ``2 * stochastic_dim`` values.  The first half
-        is the mean (unconstrained).  The second half is mapped through
-        softplus and floored at ``min_std`` to guarantee a valid, non-
-        degenerate standard deviation.
+    def _sample_categorical(self, logits: Tensor) -> Tensor:
+        """Straight-through categorical sample.
+
+        Forward: hard one-hot sample from each categorical distribution.
+        Backward: gradients flow through the softmax probabilities.
+
+        Args:
+            logits: Shape ``(B, num_categoricals, num_classes)``.
+
+        Returns:
+            Flattened one-hot stochastic state, shape ``(B, stochastic_dim)``.
         """
-        mean, std_param = torch.chunk(stats, 2, dim=-1)
-        # softplus keeps std positive; min_std prevents posterior collapse
-        std = torch.nn.functional.softplus(std_param) + self.min_std
-        return mean, std
-
-    def _sample_stochastic(self, mean: Tensor, std: Tensor) -> Tensor:
-        """Reparameterized Gaussian sample: ``mean + std * N(0, I)``.
-
-        The reparameterization trick allows gradients to flow through the
-        sampling operation and back into the distribution parameters.
-        """
-        noise = torch.randn_like(mean)
-        return mean + std * noise
+        # Soft probabilities for gradient flow
+        probs = torch.softmax(logits, dim=-1)
+        # Hard one-hot sample
+        indices = torch.distributions.Categorical(logits=logits).sample()
+        hard = torch.nn.functional.one_hot(indices, self.num_classes).to(dtype=probs.dtype)
+        # Straight-through: hard forward, soft backward
+        stochastic = hard + probs - probs.detach()
+        # Flatten: (B, num_cat, num_classes) → (B, num_cat * num_classes)
+        return stochastic.reshape(-1, self.stochastic_dim)
 
     def _next_deterministic(self, prev_state: LatentState, action: Tensor) -> Tensor:
         """Advance the deterministic GRU backbone by one step.
@@ -210,20 +218,19 @@ class RecurrentStateSpaceModel(nn.Module):
 
         Returns:
             LatentState containing ``h_t``, sampled ``s_t``, and the
-            prior distribution parameters (``dist_mean``, ``dist_std``).
+            prior distribution logits.
         """
         deterministic = self._next_deterministic(prev_state, action)
 
-        # Prior: predict stochastic state from deterministic alone
-        prior_stats = self.prior_model(deterministic)
-        prior_mean, prior_std = self._distribution_parameters(prior_stats)
-        stochastic = self._sample_stochastic(prior_mean, prior_std)
+        # Prior: predict categorical logits from deterministic state alone
+        prior_raw = self.prior_model(deterministic)
+        prior_logits = self._compute_logits(prior_raw)
+        stochastic = self._sample_categorical(prior_logits)
 
         return LatentState(
             deterministic=deterministic,
             stochastic=stochastic,
-            dist_mean=prior_mean,
-            dist_std=prior_std,
+            logits=prior_logits,
         )
 
     def imagine_rollout(self, start_state: LatentState, actions: Tensor) -> list[LatentState]:
@@ -270,20 +277,19 @@ class RecurrentStateSpaceModel(nn.Module):
 
         Returns:
             LatentState containing ``h_t``, sampled ``s_t``, the posterior
-            distribution parameters, and the observation embedding.
+            distribution logits, and the observation embedding.
         """
         deterministic = self._next_deterministic(prev_state, action)
 
         # Posterior: condition on both h_t and the observation embedding e_t
         embedding = embedding.to(dtype=self._dtype)
-        posterior_stats = self.posterior_model(torch.cat([deterministic, embedding], dim=-1))
-        posterior_mean, posterior_std = self._distribution_parameters(posterior_stats)
-        stochastic = self._sample_stochastic(posterior_mean, posterior_std)
+        posterior_raw = self.posterior_model(torch.cat([deterministic, embedding], dim=-1))
+        posterior_logits = self._compute_logits(posterior_raw)
+        stochastic = self._sample_categorical(posterior_logits)
 
         return LatentState(
             embedding=embedding,
             deterministic=deterministic,
             stochastic=stochastic,
-            dist_mean=posterior_mean,
-            dist_std=posterior_std,
+            logits=posterior_logits,
         )

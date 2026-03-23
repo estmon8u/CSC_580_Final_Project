@@ -81,7 +81,9 @@ class TinyWorldModel(nn.Module):
         action_dim: int = 2,
         embedding_dim: int = 1024,
         deterministic_dim: int = 200,
-        stochastic_dim: int = 30,
+        stochastic_dim: int | None = None,
+        num_categoricals: int = 32,
+        num_classes: int = 32,
         hidden_dim: int = 200,
         rssm_min_std: float = 0.1,
         rssm_num_layers: int = 2,
@@ -104,12 +106,13 @@ class TinyWorldModel(nn.Module):
             action_dim=action_dim,
             embedding_dim=embedding_dim,
             deterministic_dim=deterministic_dim,
-            stochastic_dim=stochastic_dim,
+            num_categoricals=num_categoricals,
+            num_classes=num_classes,
             hidden_dim=hidden_dim,
             min_std=rssm_min_std,
             num_layers=rssm_num_layers,
         )
-        latent_dim = deterministic_dim + stochastic_dim
+        latent_dim = deterministic_dim + self.rssm.stochastic_dim
         self.decoder = ObservationDecoder(
             latent_dim=latent_dim,
             output_shape=observation_shape,

@@ -6,7 +6,7 @@ from tiny_dreamer_highway.models import RecurrentStateSpaceModel
 def test_rssm_initial_state_shapes() -> None:
     rssm = RecurrentStateSpaceModel(
         action_dim=2, embedding_dim=256,
-        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+        deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128, num_layers=1,
     )
 
     state = rssm.initial_state(batch_size=4)
@@ -21,7 +21,7 @@ def test_rssm_initial_state_shapes() -> None:
 def test_rssm_imagine_step_preserves_latent_shapes() -> None:
     rssm = RecurrentStateSpaceModel(
         action_dim=2, embedding_dim=256,
-        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+        deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128, num_layers=1,
     )
     prev_state = rssm.initial_state(batch_size=3)
     action = torch.randn(3, 2)
@@ -39,7 +39,7 @@ def test_rssm_imagine_step_preserves_latent_shapes() -> None:
 def test_rssm_observe_step_incorporates_encoder_embedding() -> None:
     rssm = RecurrentStateSpaceModel(
         action_dim=2, embedding_dim=256,
-        deterministic_dim=128, stochastic_dim=32, hidden_dim=128, num_layers=1,
+        deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128, num_layers=1,
     )
     prev_state = rssm.initial_state(batch_size=5)
     action = torch.randn(5, 2)
@@ -56,7 +56,7 @@ def test_rssm_observe_step_incorporates_encoder_embedding() -> None:
 
 
 def test_rssm_rolls_forward_multiple_steps() -> None:
-    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=64, deterministic_dim=64, stochastic_dim=16)
+    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=64, deterministic_dim=64, num_categoricals=2, num_classes=8)
     state = rssm.initial_state(batch_size=2)
 
     for _ in range(4):
@@ -72,7 +72,7 @@ def test_rssm_rolls_forward_multiple_steps() -> None:
 
 
 def test_rssm_imagine_rollout_returns_one_state_per_action_step() -> None:
-    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=64, deterministic_dim=64, stochastic_dim=16)
+    rssm = RecurrentStateSpaceModel(action_dim=2, embedding_dim=64, deterministic_dim=64, num_categoricals=2, num_classes=8)
     state = rssm.initial_state(batch_size=2)
     actions = torch.randn(2, 3, 2)
 

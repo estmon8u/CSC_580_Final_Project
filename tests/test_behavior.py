@@ -26,7 +26,7 @@ def test_actor_and_critic_return_expected_shapes() -> None:
 def test_imagine_trajectory_returns_expected_shapes() -> None:
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -91,7 +91,7 @@ def test_weighted_mean_uses_weight_sum_normalization() -> None:
 def test_imagine_trajectory_applies_action_stabilization(monkeypatch) -> None:
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -123,7 +123,7 @@ def test_train_behavior_step_updates_actor_and_critic_without_changing_world_mod
     torch.manual_seed(7)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)

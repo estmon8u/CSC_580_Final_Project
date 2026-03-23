@@ -1,6 +1,6 @@
 """Deterministic mathematical tests for all loss functions.
 
-Verifies exact hand-computed values for: Gaussian KL divergence,
+Verifies exact hand-computed values for: categorical KL divergence,
 reconstruction (Gaussian NLL), reward loss, continue loss (BCE),
 free-nats clamping, and total loss composition.
 """
@@ -14,86 +14,79 @@ from tiny_dreamer_highway.models.encoder import LatentState
 from tiny_dreamer_highway.models.world_model import WorldModelOutput
 from tiny_dreamer_highway.training.world_model_step import (
     compute_world_model_losses,
-    gaussian_kl_divergence,
+    categorical_kl_divergence,
 )
 
 
-# ── Gaussian KL divergence ───────────────────────────────────────────
+# ── Categorical KL divergence ────────────────────────────────────────
 
 def test_kl_identical_distributions_is_zero() -> None:
-    """KL(N(0,1) || N(0,1)) = 0."""
-    mean = torch.zeros(4, 8)
-    std = torch.ones(4, 8)
-    kl = gaussian_kl_divergence(mean, std, mean, std)
+    """KL(p || p) = 0 for any categorical distribution."""
+    logits = torch.randn(4, 4, 8)  # (B, num_cat, num_cls)
+    kl = categorical_kl_divergence(logits, logits)
     assert torch.allclose(kl, torch.tensor(0.0), atol=1e-6)
 
 
-def test_kl_shifted_mean_unit_variance() -> None:
-    """KL(N(1,1) || N(0,1)) = 0.5 * (1+0-1-0) = 0.5.
+def test_kl_uniform_vs_peaked() -> None:
+    """KL(uniform || peaked) > 0."""
+    # Uniform posterior: all logits equal → equal probs
+    post_logits = torch.zeros(1, 1, 4)  # (B=1, num_cat=1, num_cls=4)
+    # Peaked prior: one class dominates
+    prior_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])
+    kl = categorical_kl_divergence(post_logits, prior_logits)
+    assert kl.item() > 0.0
 
-    var_ratio = 1, mean_diff = 1, per_dim = 0.5*(1+1-1-0) = 0.5
-    sum over 1 dim, mean over batch=1 → 0.5
+
+def test_kl_peaked_vs_uniform() -> None:
+    """KL(peaked || uniform) > 0, and differs from reverse direction."""
+    post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])  # peaked
+    prior_logits = torch.zeros(1, 1, 4)  # uniform
+    kl_forward = categorical_kl_divergence(post_logits, prior_logits)
+    kl_reverse = categorical_kl_divergence(prior_logits, post_logits)
+    assert kl_forward.item() > 0.0
+    # KL is asymmetric
+    assert not torch.allclose(kl_forward, kl_reverse)
+
+
+def test_kl_multiple_categoricals_sums() -> None:
+    """KL sums over categoricals, averages over batch.
+
+    Two identical categoricals each contributing KL=k → total = 2k.
     """
-    post_mean = torch.tensor([[1.0]])
-    post_std = torch.tensor([[1.0]])
-    prior_mean = torch.tensor([[0.0]])
-    prior_std = torch.tensor([[1.0]])
+    post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])  # (1,1,4)
+    prior_logits = torch.zeros(1, 1, 4)
+    kl_one = categorical_kl_divergence(post_logits, prior_logits)
 
-    kl = gaussian_kl_divergence(post_mean, post_std, prior_mean, prior_std)
-    assert torch.allclose(kl, torch.tensor(0.5), atol=1e-5)
+    # Stack two copies → (1, 2, 4)
+    post_two = post_logits.expand(1, 2, 4)
+    prior_two = prior_logits.expand(1, 2, 4)
+    kl_two = categorical_kl_divergence(post_two, prior_two)
 
-
-def test_kl_different_variance() -> None:
-    """KL(N(0,2) || N(0,1)) = 0.5 * (4 + 0 - 1 - ln(4)).
-
-    per_dim = 0.5 * (4 - 1 - ln4) = 0.5 * (3 - 1.3863) = 0.8069
-    """
-    post_mean = torch.tensor([[0.0]])
-    post_std = torch.tensor([[2.0]])
-    prior_mean = torch.tensor([[0.0]])
-    prior_std = torch.tensor([[1.0]])
-
-    kl = gaussian_kl_divergence(post_mean, post_std, prior_mean, prior_std)
-    expected = 0.5 * (4.0 + 0.0 - 1.0 - math.log(4.0))
-    assert torch.allclose(kl, torch.tensor(expected), atol=1e-4)
-
-
-def test_kl_multiple_dims() -> None:
-    """KL sums over latent dims, then averages over batch.
-
-    2 dims, each with KL=0.5 → sum=1.0 per batch item.
-    """
-    post_mean = torch.tensor([[1.0, 1.0]])
-    post_std = torch.tensor([[1.0, 1.0]])
-    prior_mean = torch.tensor([[0.0, 0.0]])
-    prior_std = torch.tensor([[1.0, 1.0]])
-
-    kl = gaussian_kl_divergence(post_mean, post_std, prior_mean, prior_std)
-    # Each dim contributes 0.5, sum over 2 dims = 1.0
-    assert torch.allclose(kl, torch.tensor(1.0), atol=1e-5)
+    assert torch.allclose(kl_two, 2.0 * kl_one, atol=1e-5)
 
 
 def test_kl_batch_averaging() -> None:
-    """KL averages over batch. Two items with KL 0.5 each → mean 0.5."""
-    post_mean = torch.tensor([[1.0], [1.0]])
-    post_std = torch.tensor([[1.0], [1.0]])
-    prior_mean = torch.tensor([[0.0], [0.0]])
-    prior_std = torch.tensor([[1.0], [1.0]])
+    """KL averages over batch. Two identical items → same KL."""
+    post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])
+    prior_logits = torch.zeros(1, 1, 4)
+    kl_single = categorical_kl_divergence(post_logits, prior_logits)
 
-    kl = gaussian_kl_divergence(post_mean, post_std, prior_mean, prior_std)
-    assert torch.allclose(kl, torch.tensor(0.5), atol=1e-5)
+    # Duplicate batch → (2, 1, 4)
+    post_batch = post_logits.expand(2, 1, 4)
+    prior_batch = prior_logits.expand(2, 1, 4)
+    kl_batch = categorical_kl_divergence(post_batch, prior_batch)
+
+    assert torch.allclose(kl_batch, kl_single, atol=1e-5)
 
 
 def test_kl_is_always_non_negative() -> None:
     """KL divergence ≥ 0 (information inequality)."""
     torch.manual_seed(42)
     for _ in range(10):
-        post_mean = torch.randn(5, 8)
-        post_std = torch.rand(5, 8) + 0.01
-        prior_mean = torch.randn(5, 8)
-        prior_std = torch.rand(5, 8) + 0.01
+        post_logits = torch.randn(5, 4, 8)
+        prior_logits = torch.randn(5, 4, 8)
 
-        kl = gaussian_kl_divergence(post_mean, post_std, prior_mean, prior_std)
+        kl = categorical_kl_divergence(post_logits, prior_logits)
         assert kl.item() >= -1e-6  # allow tiny float imprecision
 
 
@@ -190,14 +183,12 @@ def _make_dummy_world_model_output(
     posterior = LatentState(
         deterministic=torch.zeros(batch_size, 8),
         stochastic=torch.zeros(batch_size, stochastic_dim),
-        dist_mean=torch.zeros(batch_size, stochastic_dim),
-        dist_std=torch.ones(batch_size, stochastic_dim),
+        logits=torch.zeros(batch_size, 4, stochastic_dim // 4),
     )
     prior = LatentState(
         deterministic=torch.zeros(batch_size, 8),
         stochastic=torch.zeros(batch_size, stochastic_dim),
-        dist_mean=torch.zeros(batch_size, stochastic_dim),
-        dist_std=torch.ones(batch_size, stochastic_dim),
+        logits=torch.zeros(batch_size, 4, stochastic_dim // 4),
     )
 
     return WorldModelOutput(

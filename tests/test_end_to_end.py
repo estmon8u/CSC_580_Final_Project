@@ -161,7 +161,7 @@ def test_one_training_cycle_produces_finite_metrics_and_expected_update_boundari
     torch.manual_seed(7)
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
     critic = Critic(latent_dim=160, hidden_dim=64, num_layers=1)
@@ -226,7 +226,7 @@ def test_evaluate_training_policy_returns_expected_keys(monkeypatch) -> None:
     config = ExperimentConfig.model_validate({"seed": 7, "device": "cpu"})
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
 
@@ -252,7 +252,7 @@ def test_evaluate_training_policy_restores_training_mode(monkeypatch) -> None:
     config = ExperimentConfig.model_validate({"seed": 7, "device": "cpu"})
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
 
@@ -269,7 +269,7 @@ def test_evaluate_training_policy_zero_episodes_returns_empty() -> None:
     config = ExperimentConfig.model_validate({"seed": 7, "device": "cpu"})
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = Actor(latent_dim=160, action_dim=2, hidden_dim=64, num_layers=1)
 
@@ -307,7 +307,7 @@ def test_collect_actor_transitions_discrete_stores_one_hot_actions(monkeypatch) 
 
     world_model = TinyWorldModel(
         observation_shape=(1, 64, 64), action_dim=5,
-        embedding_dim=256, deterministic_dim=128, stochastic_dim=32, hidden_dim=128,
+        embedding_dim=256, deterministic_dim=128, num_categoricals=4, num_classes=8, hidden_dim=128,
     )
     actor = DiscreteActor(latent_dim=160, num_actions=5, hidden_dim=64, num_layers=1)
     replay = ReplayBuffer(capacity=32)

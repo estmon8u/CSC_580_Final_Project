@@ -113,14 +113,20 @@ class EvaluationConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Configurable model dimensions — matches DreamerV1 reference defaults."""
+    """Configurable model dimensions — DreamerV2 categorical latent state."""
 
     embedding_dim: int = Field(default=1024, ge=32, le=4096)
     deterministic_dim: int = Field(default=200, ge=32, le=2048)
-    stochastic_dim: int = Field(default=30, ge=8, le=512)
+    num_categoricals: int = Field(default=32, ge=1, le=128)
+    num_classes: int = Field(default=32, ge=2, le=128)
     hidden_dim: int = Field(default=200, ge=32, le=2048)
     rssm_num_layers: int = Field(default=2, ge=1, le=4)
     rssm_min_std: float = Field(default=0.1, gt=0.0, le=5.0)
+
+    @property
+    def stochastic_dim(self) -> int:
+        """Flattened stochastic state size = num_categoricals * num_classes."""
+        return self.num_categoricals * self.num_classes
     actor_hidden_dim: int = Field(default=200, ge=32, le=2048)
     actor_num_layers: int = Field(default=2, ge=1, le=4)
     actor_init_std: float = Field(default=5.0, gt=0.0, le=10.0)

@@ -3,8 +3,8 @@
 Provides the per-transition loss computation used as a building block
 by ``sequence_world_model_step.py``.  Key exports:
 
-* ``gaussian_kl_divergence`` — analytic KL between two diagonal
-  Gaussians (the Dreamer prior and posterior).
+* ``categorical_kl_divergence`` — KL between two sets of independent
+  categorical distributions (the DreamerV2 prior and posterior).
 * ``compute_world_model_losses`` — reconstruction, reward, continue,
   and KL losses for a single world-model forward output.
 * ``_backward_and_step`` — gradient clipping + optimizer step with
@@ -29,23 +29,28 @@ from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOu
 
 
 # ---------------------------------------------------------------------------
-# Gaussian KL divergence — core Dreamer V1 regularisation
+# Categorical KL divergence — core DreamerV2 regularisation
 # ---------------------------------------------------------------------------
 
-def gaussian_kl_divergence(
-    posterior_mean: Tensor,
-    posterior_std: Tensor,
-    prior_mean: Tensor,
-    prior_std: Tensor,
+def categorical_kl_divergence(
+    posterior_logits: Tensor,
+    prior_logits: Tensor,
 ) -> Tensor:
-    """Analytic KL(posterior || prior) for diagonal Gaussians.
+    """KL(posterior || prior) for independent categorical distributions.
 
-    Returns a scalar (mean over batch and latent dimensions).
+    Args:
+        posterior_logits: Shape ``(B, num_categoricals, num_classes)`` or ``(B, T, num_cat, num_cls)``.
+        prior_logits:    Same shape as posterior_logits.
+
+    Returns a scalar (mean over batch, time, and categorical dimensions).
     """
-    var_ratio = (posterior_std / prior_std).pow(2)
-    mean_diff = ((prior_mean - posterior_mean) / prior_std).pow(2)
-    kl_per_dim = 0.5 * (var_ratio + mean_diff - 1.0 - var_ratio.log())
-    return kl_per_dim.sum(dim=-1).mean()
+    post_probs = torch.softmax(posterior_logits, dim=-1)
+    post_log_probs = torch.log_softmax(posterior_logits, dim=-1)
+    prior_log_probs = torch.log_softmax(prior_logits, dim=-1)
+    # KL per categorical = Σ_k p(k) * [log p(k) - log q(k)]
+    kl_per_cat = (post_probs * (post_log_probs - prior_log_probs)).sum(dim=-1)
+    # Sum over categoricals, mean over batch (and time if present)
+    return kl_per_cat.sum(dim=-1).mean()
 
 
 # ---------------------------------------------------------------------------
@@ -92,20 +97,16 @@ def compute_world_model_losses(
             continue_targets,
         )
 
-    # KL divergence between posterior and prior (Dreamer V1 §3)
+    # KL divergence between posterior and prior (DreamerV2 categorical KL)
     posterior = output.posterior_state
     prior = output.prior_state
     if (
-        posterior.dist_mean is not None
-        and posterior.dist_std is not None
-        and prior.dist_mean is not None
-        and prior.dist_std is not None
+        posterior.logits is not None
+        and prior.logits is not None
     ):
-        raw_kl = gaussian_kl_divergence(
-            posterior.dist_mean,
-            posterior.dist_std,
-            prior.dist_mean,
-            prior.dist_std,
+        raw_kl = categorical_kl_divergence(
+            posterior.logits,
+            prior.logits,
         )
         # Free-nats: clamp KL below a threshold so the model does not over-
         # regularise early in training (Dreamer V1 default = 3 nats).

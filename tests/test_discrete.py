@@ -96,7 +96,7 @@ def test_imagine_trajectory_with_discrete_actor() -> None:
         action_dim=action_dim,
         embedding_dim=256,
         deterministic_dim=128,
-        stochastic_dim=32,
+        num_categoricals=4, num_classes=8,
         hidden_dim=128,
     )
     actor = DiscreteActor(latent_dim=160, num_actions=action_dim, hidden_dim=64, num_layers=1)
@@ -120,7 +120,7 @@ def test_imagine_trajectory_discrete_skips_stabilization() -> None:
         action_dim=action_dim,
         embedding_dim=256,
         deterministic_dim=128,
-        stochastic_dim=32,
+        num_categoricals=4, num_classes=8,
         hidden_dim=128,
     )
     actor = DiscreteActor(latent_dim=160, num_actions=action_dim, hidden_dim=64, num_layers=1)
@@ -158,7 +158,7 @@ def test_train_behavior_step_with_discrete_actor() -> None:
         action_dim=action_dim,
         embedding_dim=256,
         deterministic_dim=128,
-        stochastic_dim=32,
+        num_categoricals=4, num_classes=8,
         hidden_dim=128,
     )
     actor = DiscreteActor(latent_dim=160, num_actions=action_dim, hidden_dim=64, num_layers=1)

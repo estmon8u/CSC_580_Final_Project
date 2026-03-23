@@ -13,7 +13,7 @@ from tiny_dreamer_highway.models.world_model import TinyWorldModel
 def _make_world_model(seed: int = 42, **kwargs) -> TinyWorldModel:
     defaults = dict(
         observation_shape=(1, 64, 64), action_dim=2,
-        embedding_dim=64, deterministic_dim=32, stochastic_dim=8,
+        embedding_dim=64, deterministic_dim=32, num_categoricals=4, num_classes=8,
         hidden_dim=32, rssm_num_layers=1,
         reward_hidden_dim=32, reward_num_layers=1,
         continue_hidden_dim=32, continue_num_layers=1,
@@ -73,14 +73,14 @@ def test_prior_and_posterior_stochastic_states_differ() -> None:
     out = wm(obs, actions)
 
     # Prior uses only deterministic state, posterior also uses embedding
-    # Their distribution parameters should differ
+    # Their logits should differ
     assert not torch.allclose(
-        out.prior_state.dist_mean, out.posterior_state.dist_mean
+        out.prior_state.logits, out.posterior_state.logits
     )
 
 
 def test_prior_and_posterior_have_distribution_params() -> None:
-    """Both states carry dist_mean and dist_std."""
+    """Both states carry logits."""
     wm = _make_world_model()
     obs = torch.randint(0, 256, (1, 1, 64, 64), dtype=torch.uint8)
     actions = torch.randn(1, 2)
@@ -88,22 +88,20 @@ def test_prior_and_posterior_have_distribution_params() -> None:
     out = wm(obs, actions)
 
     for state in [out.prior_state, out.posterior_state]:
-        assert state.dist_mean is not None
-        assert state.dist_std is not None
-        assert state.dist_mean.shape == (1, 8)  # stochastic_dim=8
-        assert state.dist_std.shape == (1, 8)
+        assert state.logits is not None
+        assert state.logits.shape == (1, 4, 8)  # num_categoricals=4, num_classes=8
 
 
 # ── latent dimensions ────────────────────────────────────────────────
 
 def test_features_dim_equals_det_plus_stoch() -> None:
-    """posterior_state.features has dim = deterministic_dim + stochastic_dim."""
-    wm = _make_world_model(deterministic_dim=32, stochastic_dim=8)
+    """posterior_state.features has dim = deterministic_dim + num_categoricals*num_classes."""
+    wm = _make_world_model(deterministic_dim=32, num_categoricals=4, num_classes=8)
     obs = torch.randint(0, 256, (1, 1, 64, 64), dtype=torch.uint8)
     actions = torch.randn(1, 2)
 
     out = wm(obs, actions)
-    assert out.posterior_state.features.shape[-1] == 32 + 8
+    assert out.posterior_state.features.shape[-1] == 32 + 32  # 32 + 4*8
 
 
 # ── reconstruction output ───────────────────────────────────────────
@@ -212,7 +210,7 @@ def test_prev_state_influences_output() -> None:
 
     custom_state = LatentState(
         deterministic=torch.randn(1, 32),
-        stochastic=torch.randn(1, 8),
+        stochastic=torch.randn(1, 32),  # 4 * 8 = 32
     )
     torch.manual_seed(10)
     out_custom = wm(obs, actions, prev_state=custom_state)
