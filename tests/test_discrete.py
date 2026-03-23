@@ -31,7 +31,7 @@ def test_action_config_discrete_flag() -> None:
 
 
 def test_load_discrete_experiment_yaml() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "discrete_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "discrete_experiment.yaml"
     config = load_experiment_config(config_path)
     assert config.env.action.type == "discrete"
     assert config.env.action.is_discrete

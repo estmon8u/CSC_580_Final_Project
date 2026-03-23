@@ -15,15 +15,16 @@ from tiny_dreamer_highway.models.world_model import WorldModelOutput
 from tiny_dreamer_highway.training.world_model_step import (
     compute_world_model_losses,
     categorical_kl_divergence,
+    _raw_categorical_kl,
 )
 
 
-# ── Categorical KL divergence ────────────────────────────────────────
+# ── Categorical KL divergence (raw, unbalanced) ──────────────────────
 
 def test_kl_identical_distributions_is_zero() -> None:
     """KL(p || p) = 0 for any categorical distribution."""
     logits = torch.randn(4, 4, 8)  # (B, num_cat, num_cls)
-    kl = categorical_kl_divergence(logits, logits)
+    kl = _raw_categorical_kl(logits, logits)
     assert torch.allclose(kl, torch.tensor(0.0), atol=1e-6)
 
 
@@ -33,7 +34,7 @@ def test_kl_uniform_vs_peaked() -> None:
     post_logits = torch.zeros(1, 1, 4)  # (B=1, num_cat=1, num_cls=4)
     # Peaked prior: one class dominates
     prior_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])
-    kl = categorical_kl_divergence(post_logits, prior_logits)
+    kl = _raw_categorical_kl(post_logits, prior_logits)
     assert kl.item() > 0.0
 
 
@@ -41,8 +42,8 @@ def test_kl_peaked_vs_uniform() -> None:
     """KL(peaked || uniform) > 0, and differs from reverse direction."""
     post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])  # peaked
     prior_logits = torch.zeros(1, 1, 4)  # uniform
-    kl_forward = categorical_kl_divergence(post_logits, prior_logits)
-    kl_reverse = categorical_kl_divergence(prior_logits, post_logits)
+    kl_forward = _raw_categorical_kl(post_logits, prior_logits)
+    kl_reverse = _raw_categorical_kl(prior_logits, post_logits)
     assert kl_forward.item() > 0.0
     # KL is asymmetric
     assert not torch.allclose(kl_forward, kl_reverse)
@@ -55,12 +56,12 @@ def test_kl_multiple_categoricals_sums() -> None:
     """
     post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])  # (1,1,4)
     prior_logits = torch.zeros(1, 1, 4)
-    kl_one = categorical_kl_divergence(post_logits, prior_logits)
+    kl_one = _raw_categorical_kl(post_logits, prior_logits)
 
     # Stack two copies → (1, 2, 4)
     post_two = post_logits.expand(1, 2, 4)
     prior_two = prior_logits.expand(1, 2, 4)
-    kl_two = categorical_kl_divergence(post_two, prior_two)
+    kl_two = _raw_categorical_kl(post_two, prior_two)
 
     assert torch.allclose(kl_two, 2.0 * kl_one, atol=1e-5)
 
@@ -69,12 +70,12 @@ def test_kl_batch_averaging() -> None:
     """KL averages over batch. Two identical items → same KL."""
     post_logits = torch.tensor([[[10.0, 0.0, 0.0, 0.0]]])
     prior_logits = torch.zeros(1, 1, 4)
-    kl_single = categorical_kl_divergence(post_logits, prior_logits)
+    kl_single = _raw_categorical_kl(post_logits, prior_logits)
 
     # Duplicate batch → (2, 1, 4)
     post_batch = post_logits.expand(2, 1, 4)
     prior_batch = prior_logits.expand(2, 1, 4)
-    kl_batch = categorical_kl_divergence(post_batch, prior_batch)
+    kl_batch = _raw_categorical_kl(post_batch, prior_batch)
 
     assert torch.allclose(kl_batch, kl_single, atol=1e-5)
 
@@ -86,8 +87,40 @@ def test_kl_is_always_non_negative() -> None:
         post_logits = torch.randn(5, 4, 8)
         prior_logits = torch.randn(5, 4, 8)
 
-        kl = categorical_kl_divergence(post_logits, prior_logits)
+        kl = _raw_categorical_kl(post_logits, prior_logits)
         assert kl.item() >= -1e-6  # allow tiny float imprecision
+
+
+# ── KL Balancing (DreamerV2) ─────────────────────────────────────────
+
+def test_kl_balance_returns_three_tensors() -> None:
+    """categorical_kl_divergence returns (kl_loss, kl_dyn, kl_rep)."""
+    post = torch.randn(2, 4, 8)
+    prior = torch.randn(2, 4, 8)
+    result = categorical_kl_divergence(post, prior, balance=0.8)
+    assert len(result) == 3
+    kl_loss, kl_dyn, kl_rep = result
+    assert kl_loss.ndim == 0
+    assert kl_dyn.ndim == 0
+    assert kl_rep.ndim == 0
+
+
+def test_kl_balance_half_equals_raw() -> None:
+    """With balance=0.5, the combined loss equals the raw KL."""
+    post = torch.randn(2, 4, 8)
+    prior = torch.randn(2, 4, 8)
+    kl_loss, _, _ = categorical_kl_divergence(post, prior, balance=0.5)
+    raw_kl = _raw_categorical_kl(post, prior)
+    assert torch.allclose(kl_loss, raw_kl, atol=1e-5)
+
+
+def test_kl_balance_identical_is_zero() -> None:
+    """All three terms are zero when posterior == prior."""
+    logits = torch.randn(3, 4, 8)
+    kl_loss, kl_dyn, kl_rep = categorical_kl_divergence(logits, logits, balance=0.8)
+    assert torch.allclose(kl_loss, torch.tensor(0.0), atol=1e-6)
+    assert torch.allclose(kl_dyn, torch.tensor(0.0), atol=1e-6)
+    assert torch.allclose(kl_rep, torch.tensor(0.0), atol=1e-6)
 
 
 # ── Continue loss (BCE) ──────────────────────────────────────────────

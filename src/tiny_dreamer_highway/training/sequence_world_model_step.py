@@ -44,6 +44,7 @@ from tiny_dreamer_highway.training.world_model_step import (
     _backward_and_step,
     compute_world_model_losses,
     categorical_kl_divergence,
+    _raw_categorical_kl,
 )
 from tiny_dreamer_highway.types import ReplaySequenceBatch, Transition
 
@@ -59,6 +60,7 @@ def _compute_vectorized_losses(
     *,
     terminal_targets: Tensor | None,
     free_nats: float,
+    kl_balance: float,
     continue_loss_weight: float,
     observation_std: float,
     reward_std: float,
@@ -159,14 +161,15 @@ def _compute_vectorized_losses(
             predicted_continues, continue_targets,
         )
 
-    # ── KL divergence (categorical KL, DreamerV2) ────────────────
-    # KL( q(s_t|h_t,e_t) || p(s_t|h_t) )  —  pushes the prior toward
-    # the posterior so that imagination rollouts (which only use the
-    # prior) remain accurate.
-    raw_kl = categorical_kl_divergence(post_logits, prior_logits)
-    # Free-nats: don’t penalize KL below this threshold so the model can
-    # first learn useful latent representations before being compressed.
-    kl_loss = torch.clamp(raw_kl, min=free_nats)
+    # ── KL divergence (DreamerV2 balanced categorical KL) ──────────
+    # Split into dynamics loss and representation loss with stop-
+    # gradients so the prior and posterior receive separate learning
+    # signals (Hafner et al., 2021).
+    kl_loss, kl_dyn, kl_rep = categorical_kl_divergence(
+        post_logits, prior_logits,
+        balance=kl_balance, free_nats=free_nats,
+    )
+    raw_kl = _raw_categorical_kl(post_logits, prior_logits)
 
     return {
         "reconstruction_loss": reconstruction_loss,
@@ -176,6 +179,8 @@ def _compute_vectorized_losses(
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
         "kl_loss_raw": raw_kl.detach(),
+        "kl_dynamics": kl_dyn.detach(),
+        "kl_representation": kl_rep.detach(),
     }
 
 
@@ -256,7 +261,7 @@ def compute_latent_overshooting_losses(
 
             # Compare imagined distribution against the actual posterior
             # (detached so the posterior is treated as a fixed target).
-            kl_total = kl_total + categorical_kl_divergence(
+            kl_total = kl_total + _raw_categorical_kl(
                 target_state.logits.detach(),
                 imagined_state.logits,
             )
@@ -335,6 +340,7 @@ def compute_sequence_world_model_losses(
     dones: Tensor | None = None,
     terminals: Tensor | None = None,
     kl_weight: float = 1.0,
+    kl_balance: float = 0.8,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
     overshooting_horizon: int = 0,
@@ -430,6 +436,7 @@ def compute_sequence_world_model_losses(
         prior_logits=prior_logits,
         terminal_targets=terminal_targets,
         free_nats=free_nats,
+        kl_balance=kl_balance,
         continue_loss_weight=continue_loss_weight,
         observation_std=(1.0 if model.decoder.distribution_std is None else model.decoder.distribution_std),
         reward_std=(1.0 if model.reward_predictor.distribution_std is None else model.reward_predictor.distribution_std),
@@ -490,6 +497,7 @@ def train_sequence_world_model_step(
     dones: Tensor | None = None,
     terminals: Tensor | None = None,
     kl_weight: float = 1.0,
+    kl_balance: float = 0.8,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
     overshooting_horizon: int = 0,
@@ -513,6 +521,7 @@ def train_sequence_world_model_step(
             dones=dones,
             terminals=terminals,
             kl_weight=kl_weight,
+            kl_balance=kl_balance,
             free_nats=free_nats,
             continue_loss_weight=continue_loss_weight,
             overshooting_horizon=overshooting_horizon,

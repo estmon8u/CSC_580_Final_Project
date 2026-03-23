@@ -18,14 +18,14 @@ from tiny_dreamer_highway.training.sequence_world_model_step import (
 )
 from tiny_dreamer_highway.training.world_model_step import (
     compute_world_model_losses,
-    categorical_kl_divergence,
+    _raw_categorical_kl,
 )
 
 
 # ── _compute_vectorized_losses matches single-step formula ───────────
 
 def test_vectorized_kl_matches_analytic() -> None:
-    """Vectorized KL uses the same formula as categorical_kl_divergence."""
+    """Vectorized KL uses the same formula as _raw_categorical_kl."""
     B, T, num_cat, num_cls = 2, 3, 4, 8
     torch.manual_seed(42)
     post_logits = torch.randn(B, T, num_cat, num_cls)
@@ -42,6 +42,7 @@ def test_vectorized_kl_matches_analytic() -> None:
         prior_logits=prior_logits,
         terminal_targets=None,
         free_nats=0.0,
+        kl_balance=0.5,
         continue_loss_weight=1.0,
         observation_std=1.0,
         reward_std=1.0,
@@ -50,7 +51,7 @@ def test_vectorized_kl_matches_analytic() -> None:
     # Analytic path (flatten B*T, then compute)
     flat_post_logits = post_logits.reshape(B * T, num_cat, num_cls)
     flat_prior_logits = prior_logits.reshape(B * T, num_cat, num_cls)
-    analytic_kl = categorical_kl_divergence(
+    analytic_kl = _raw_categorical_kl(
         flat_post_logits, flat_prior_logits
     )
 
@@ -74,6 +75,7 @@ def test_vectorized_reward_loss_matches_manual() -> None:
         prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=0.0,
+        kl_balance=0.8,
         continue_loss_weight=1.0,
         observation_std=1.0,
         reward_std=sigma,
@@ -100,6 +102,7 @@ def test_vectorized_reconstruction_mse() -> None:
         prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=0.0,
+        kl_balance=0.8,
         continue_loss_weight=1.0,
         observation_std=1.0,
         reward_std=1.0,
@@ -124,6 +127,7 @@ def test_vectorized_free_nats_clamping() -> None:
         prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=None,
         free_nats=3.0,
+        kl_balance=0.8,
         continue_loss_weight=1.0,
         observation_std=1.0,
         reward_std=1.0,
@@ -149,6 +153,7 @@ def test_vectorized_continue_loss_matches_bce() -> None:
         prior_logits=torch.zeros(B, T, 4, 8),
         terminal_targets=terminals,
         free_nats=0.0,
+        kl_balance=0.8,
         continue_loss_weight=1.0,
         observation_std=1.0,
         reward_std=1.0,

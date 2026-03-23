@@ -60,7 +60,7 @@ def test_parser_supports_train_baseline() -> None:
 
 
 def test_summarize_config_contains_expected_fields() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "base_experiment.yaml"
     config = load_experiment_config(config_path)
     summary = summarize_config(config)
     assert "highway-v0" in summary
@@ -70,7 +70,7 @@ def test_summarize_config_contains_expected_fields() -> None:
 
 
 def test_summarize_collection_contains_sampling_shapes() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "base_experiment.yaml"
     config = load_experiment_config(config_path)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
 
@@ -93,7 +93,7 @@ def test_summarize_collection_contains_sampling_shapes() -> None:
 
 
 def test_summarize_collection_handles_tiny_buffer() -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "base_experiment.yaml"
     config = load_experiment_config(config_path)
     replay_buffer = ReplayBuffer(capacity=config.replay.capacity)
 
@@ -114,7 +114,7 @@ def test_summarize_collection_handles_tiny_buffer() -> None:
 
 
 def test_run_collect_random_uses_collection_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "base_experiment.yaml"
 
     def fake_collect_random_transitions(
         env_config,
@@ -169,7 +169,7 @@ def test_summarize_training_run_contains_key_metrics() -> None:
 
 
 def test_run_train_baseline_uses_training_experiment(monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "base_experiment.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "base_experiment.yaml"
     artifact_root = Path("artifacts/local_run")
 
     def fake_run_training_experiment(

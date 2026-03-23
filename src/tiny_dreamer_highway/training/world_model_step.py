@@ -35,21 +35,52 @@ from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOu
 def categorical_kl_divergence(
     posterior_logits: Tensor,
     prior_logits: Tensor,
-) -> Tensor:
-    """KL(posterior || prior) for independent categorical distributions.
+    *,
+    balance: float = 0.8,
+    free_nats: float = 0.0,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """KL(posterior || prior) with DreamerV2 KL balancing.
+
+    DreamerV2 splits the KL loss into two stop-gradient terms so that
+    the dynamics (prior) and representation (posterior) networks receive
+    separate learning signals:
+
+    * **dynamics loss**:        ``α · KL[sg(posterior) || prior]``
+    * **representation loss**:  ``(1-α) · KL[posterior || sg(prior)]``
+
+    When ``balance=0.5`` this is equivalent to the standard (unbalanced) KL.
 
     Args:
-        posterior_logits: Shape ``(B, num_categoricals, num_classes)`` or ``(B, T, num_cat, num_cls)``.
-        prior_logits:    Same shape as posterior_logits.
+        posterior_logits: Shape ``(B, num_cat, num_cls)`` or ``(B, T, num_cat, num_cls)``.
+        prior_logits:     Same shape as posterior_logits.
+        balance:          α — weight toward dynamics loss (default 0.8).
+        free_nats:        KL floor (applied to each term separately).
 
-    Returns a scalar (mean over batch, time, and categorical dimensions).
+    Returns:
+        ``(kl_loss, kl_balance_dyn, kl_balance_rep)`` — the combined
+        balanced KL, the dynamics term, and the representation term.
     """
+    # Dynamics loss: train the prior toward the (fixed) posterior
+    dyn_kl = _raw_categorical_kl(posterior_logits.detach(), prior_logits)
+    # Representation loss: train the posterior toward the (fixed) prior
+    rep_kl = _raw_categorical_kl(posterior_logits, prior_logits.detach())
+
+    dyn_kl_clamped = torch.clamp(dyn_kl, min=free_nats)
+    rep_kl_clamped = torch.clamp(rep_kl, min=free_nats)
+
+    kl_loss = balance * dyn_kl_clamped + (1.0 - balance) * rep_kl_clamped
+    return kl_loss, dyn_kl, rep_kl
+
+
+def _raw_categorical_kl(
+    posterior_logits: Tensor,
+    prior_logits: Tensor,
+) -> Tensor:
+    """KL(posterior || prior) for independent categoricals (no balancing)."""
     post_probs = torch.softmax(posterior_logits, dim=-1)
     post_log_probs = torch.log_softmax(posterior_logits, dim=-1)
     prior_log_probs = torch.log_softmax(prior_logits, dim=-1)
-    # KL per categorical = Σ_k p(k) * [log p(k) - log q(k)]
     kl_per_cat = (post_probs * (post_log_probs - prior_log_probs)).sum(dim=-1)
-    # Sum over categoricals, mean over batch (and time if present)
     return kl_per_cat.sum(dim=-1).mean()
 
 
@@ -63,6 +94,7 @@ def compute_world_model_losses(
     target_rewards: Tensor,
     *,
     kl_weight: float = 1.0,
+    kl_balance: float = 0.8,
     free_nats: float = 3.0,
     target_dones: Tensor | None = None,
     target_terminals: Tensor | None = None,
@@ -97,23 +129,25 @@ def compute_world_model_losses(
             continue_targets,
         )
 
-    # KL divergence between posterior and prior (DreamerV2 categorical KL)
+    # KL divergence between posterior and prior (DreamerV2 balanced KL)
     posterior = output.posterior_state
     prior = output.prior_state
     if (
         posterior.logits is not None
         and prior.logits is not None
     ):
-        raw_kl = categorical_kl_divergence(
+        kl_loss, kl_dyn, kl_rep = categorical_kl_divergence(
             posterior.logits,
             prior.logits,
+            balance=kl_balance,
+            free_nats=free_nats,
         )
-        # Free-nats: clamp KL below a threshold so the model does not over-
-        # regularise early in training (Dreamer V1 default = 3 nats).
-        kl_loss = torch.clamp(raw_kl, min=free_nats)
+        raw_kl = _raw_categorical_kl(posterior.logits, prior.logits)
     else:
         raw_kl = torch.zeros((), device=target_observations.device)
         kl_loss = raw_kl
+        kl_dyn = raw_kl
+        kl_rep = raw_kl
 
     total_loss = (
         reconstruction_loss
@@ -129,6 +163,8 @@ def compute_world_model_losses(
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
         "kl_loss_raw": raw_kl.detach(),
+        "kl_dynamics": kl_dyn.detach(),
+        "kl_representation": kl_rep.detach(),
         "total_loss": total_loss,
     }
 
@@ -174,6 +210,7 @@ def train_world_model_step(
     dones: Tensor | None = None,
     terminals: Tensor | None = None,
     kl_weight: float = 1.0,
+    kl_balance: float = 0.8,
     free_nats: float = 3.0,
     continue_loss_weight: float = 1.0,
     grad_clip_norm: float = 100.0,
@@ -190,6 +227,7 @@ def train_world_model_step(
             observations,
             rewards,
             kl_weight=kl_weight,
+            kl_balance=kl_balance,
             free_nats=free_nats,
             target_dones=dones,
             target_terminals=terminals,

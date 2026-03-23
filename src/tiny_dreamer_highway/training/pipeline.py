@@ -373,6 +373,7 @@ def run_training_cycle(
             rewards,
             terminals=torch.from_numpy(seq_batch.terminals).to(dtype=torch.float32, device=model_device, non_blocking=True),
             kl_weight=training_config.kl_weight,
+            kl_balance=training_config.kl_balance,
             free_nats=training_config.free_nats,
             continue_loss_weight=training_config.continue_loss_weight,
             overshooting_horizon=training_config.overshooting_horizon,

@@ -12,7 +12,7 @@ def test_load_experiment_config_reads_example() -> None:
     assert config.replay.sequence_length == 8
     assert config.training.imagination_horizon == 5
     assert config.training.overshooting_horizon == 0
-    assert config.training.overshooting_kl_weight == 0.5
+    assert config.training.overshooting_kl_weight == 0.0
     assert config.model.reward_distribution_std == 1.0
     assert config.model.critic_distribution_std == 1.0
     assert config.model.observation_distribution_std == 1.0

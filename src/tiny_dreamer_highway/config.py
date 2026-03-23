@@ -90,6 +90,7 @@ class TrainingConfig(BaseModel):
     actor_lr: float = Field(default=8e-5, gt=0.0)
     critic_lr: float = Field(default=8e-5, gt=0.0)
     kl_weight: float = Field(default=1.0, ge=0.0)
+    kl_balance: float = Field(default=0.8, ge=0.0, le=1.0)
     free_nats: float = Field(default=3.0, ge=0.0)
     continue_loss_weight: float = Field(default=1.0, ge=0.0)
     grad_clip_norm: float = Field(default=100.0, gt=0.0, le=10_000.0)

@@ -2,7 +2,8 @@ import torch
 
 from tiny_dreamer_highway.models import TinyWorldModel
 from tiny_dreamer_highway.models.world_model import WorldModelOutput
-from tiny_dreamer_highway.training import compute_world_model_losses, categorical_kl_divergence, train_world_model_step
+from tiny_dreamer_highway.training import compute_world_model_losses, train_world_model_step
+from tiny_dreamer_highway.training.world_model_step import _raw_categorical_kl
 
 
 def test_tiny_world_model_forward_returns_expected_shapes() -> None:
@@ -49,6 +50,8 @@ def test_compute_world_model_losses_returns_expected_keys() -> None:
         "continue_loss",
         "kl_loss",
         "kl_loss_raw",
+        "kl_dynamics",
+        "kl_representation",
         "total_loss",
     }
     assert losses["total_loss"].ndim == 0
@@ -131,6 +134,8 @@ def test_train_world_model_step_runs_optimizer_step() -> None:
         "continue_loss",
         "kl_loss",
         "kl_loss_raw",
+        "kl_dynamics",
+        "kl_representation",
         "total_loss",
     }
     assert metrics["total_loss"] >= 0.0
@@ -140,7 +145,7 @@ def test_train_world_model_step_runs_optimizer_step() -> None:
 
 def test_categorical_kl_divergence_is_zero_for_identical_distributions() -> None:
     logits = torch.randn(4, 4, 8)  # (B, num_cat, num_cls)
-    kl = categorical_kl_divergence(logits, logits)
+    kl = _raw_categorical_kl(logits, logits)
     assert kl.item() < 1e-5
 
 
@@ -149,5 +154,5 @@ def test_categorical_kl_divergence_is_positive_for_different_distributions() -> 
     # Peaked prior: class 0 has high logit
     prior_logits = torch.zeros(4, 4, 8)
     prior_logits[:, :, 0] = 10.0
-    kl = categorical_kl_divergence(posterior_logits, prior_logits)
+    kl = _raw_categorical_kl(posterior_logits, prior_logits)
     assert kl.item() > 0.0

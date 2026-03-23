@@ -33,7 +33,7 @@ from tiny_dreamer_highway.config import load_experiment_config
 
 @pytest.fixture()
 def config():
-    config_path = Path(__file__).resolve().parents[1] / "examples" / "training_run.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "notebooks" / "configs" / "training_run.yaml"
     return load_experiment_config(config_path)
 
 
