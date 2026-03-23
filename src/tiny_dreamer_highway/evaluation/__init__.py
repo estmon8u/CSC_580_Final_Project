@@ -24,6 +24,7 @@ from tiny_dreamer_highway.evaluation.prediction_eval import (
 	evaluate_latent_rollout_consistency,
 	evaluate_n_step_predictions,
 	rollout_imagined_observations,
+	rollout_posterior_observations,
 )
 from tiny_dreamer_highway.evaluation.training_analysis import (
 	export_training_history_artifacts,
@@ -59,6 +60,7 @@ __all__ = [
 	"plot_prediction_metrics",
 	"record_demo_videos",
 	"rollout_imagined_observations",
+	"rollout_posterior_observations",
 	"run_policy_episode",
 	"save_prediction_comparison_grid",
 	"save_rollout_gif",

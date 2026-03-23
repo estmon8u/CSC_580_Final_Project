@@ -149,6 +149,56 @@ def rollout_imagined_observations(
     return torch.stack(predictions, dim=1)
 
 
+def rollout_posterior_observations(
+    model: TinyWorldModel,
+    seed_observation: Tensor,
+    future_actions: Tensor,
+    target_observations: Tensor,
+    *,
+    prev_action: Tensor | None = None,
+    prev_state: LatentState | None = None,
+) -> Tensor:
+    """Teacher-forced reconstruction: encode each real frame, decode posterior.
+
+    Unlike ``rollout_imagined_observations`` which uses only the prior,
+    this function feeds the *actual* observation at every step through the
+    encoder and posterior, then decodes the resulting latent state.  The
+    output shows what the world model *can* reconstruct when it has access
+    to the real frame — useful for diagnosing whether missing details (e.g.
+    NPC vehicles) are an encoding limitation or a prediction limitation.
+
+    Parameters
+    ----------
+    target_observations:
+        Real future frames, shape ``(B, H, C, H_px, W_px)``.
+    """
+    if seed_observation.ndim != 4:
+        raise ValueError("seed_observation must have shape (B, C, H, W)")
+    if future_actions.ndim != 3:
+        raise ValueError("future_actions must have shape (B, H, action_dim)")
+    if target_observations.ndim != 5:
+        raise ValueError("target_observations must have shape (B, H, C, H, W)")
+
+    batch_size = seed_observation.shape[0]
+    device = seed_observation.device
+    if prev_action is None:
+        prev_action = torch.zeros(batch_size, future_actions.shape[-1], device=device, dtype=future_actions.dtype)
+    if prev_state is None:
+        prev_state = model.rssm.initial_state(batch_size=batch_size, device=device)
+
+    with torch.no_grad():
+        embedding = model.encoder.encode(seed_observation)
+        state = model.rssm.observe_step(prev_state, prev_action, embedding)
+
+        reconstructions: list[Tensor] = []
+        for step in range(future_actions.shape[1]):
+            target_embedding = model.encoder.encode(target_observations[:, step])
+            state = model.rssm.observe_step(state, future_actions[:, step], target_embedding)
+            reconstructions.append(model.decoder(state.features))
+
+    return torch.stack(reconstructions, dim=1)
+
+
 def evaluate_n_step_predictions(
     model: TinyWorldModel,
     seed_observation: Tensor,

@@ -114,6 +114,7 @@ def save_prediction_comparison_grid(
     target: Tensor,
     output_path: str | Path,
     *,
+    posterior: Tensor | None = None,
     example_index: int = 0,
     max_steps: int | None = None,
     title: str = "Predicted vs target frames",
@@ -122,6 +123,8 @@ def save_prediction_comparison_grid(
         raise ValueError("predicted and target must have shape (B, T, C, H, W)")
     if predicted.shape != target.shape:
         raise ValueError("predicted and target must have matching shapes")
+    if posterior is not None and posterior.shape != target.shape:
+        raise ValueError("posterior must have matching shape when provided")
     if not 0 <= example_index < predicted.shape[0]:
         raise IndexError("example_index is out of range")
 
@@ -132,8 +135,12 @@ def save_prediction_comparison_grid(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    figure, axes = plt.subplots(horizon, 3, figsize=(9, 3 * horizon), squeeze=False)
-    column_titles = ["Target", "Predicted", "Absolute error"]
+    num_cols = 4 if posterior is not None else 3
+    figure, axes = plt.subplots(horizon, num_cols, figsize=(3 * num_cols, 3 * horizon), squeeze=False)
+    if posterior is not None:
+        column_titles = ["Target", "Posterior (teacher-forced)", "Prior (imagined)", "Absolute error"]
+    else:
+        column_titles = ["Target", "Predicted", "Absolute error"]
 
     for row in range(horizon):
         target_frame = _to_display_image(target[example_index, row])
@@ -141,8 +148,14 @@ def save_prediction_comparison_grid(
         error_frame = torch.abs(_normalize_image(predicted[example_index, row]) - _normalize_image(target[example_index, row]))
         error_frame = _to_display_image(error_frame)
 
-        frames = [target_frame, predicted_frame, error_frame]
-        cmaps = ["gray", "gray", "magma"]
+        if posterior is not None:
+            posterior_frame = _to_display_image(posterior[example_index, row])
+            frames = [target_frame, posterior_frame, predicted_frame, error_frame]
+            cmaps = ["gray", "gray", "gray", "magma"]
+        else:
+            frames = [target_frame, predicted_frame, error_frame]
+            cmaps = ["gray", "gray", "magma"]
+
         for column, (axis, frame, cmap) in enumerate(zip(axes[row], frames, cmaps, strict=True)):
             if row == 0:
                 axis.set_title(column_titles[column])
@@ -164,6 +177,7 @@ def export_prediction_artifacts(
     target: Tensor,
     output_dir: str | Path,
     *,
+    posterior: Tensor | None = None,
     example_index: int = 0,
     prefix: str = "n_step_eval",
     max_steps: int | None = None,
@@ -179,6 +193,7 @@ def export_prediction_artifacts(
         predicted,
         target,
         directory / f"{prefix}_comparison.png",
+        posterior=posterior,
         example_index=example_index,
         max_steps=max_steps,
     )
@@ -254,6 +269,7 @@ def export_prediction_media_bundle(
     target: Tensor,
     output_dir: str | Path,
     *,
+    posterior: Tensor | None = None,
     example_index: int = 0,
     prefix: str = "n_step_eval",
     max_steps: int | None = None,
@@ -264,6 +280,7 @@ def export_prediction_media_bundle(
         predicted,
         target,
         output_dir,
+        posterior=posterior,
         example_index=example_index,
         prefix=prefix,
         max_steps=max_steps,
