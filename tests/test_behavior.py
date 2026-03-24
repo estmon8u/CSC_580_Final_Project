@@ -152,8 +152,18 @@ def test_train_behavior_step_updates_actor_and_critic_without_changing_world_mod
     assert metrics.keys() == {
         "actor_loss",
         "critic_loss",
+        "actor_grad_norm",
+        "critic_grad_norm",
         "imagined_reward_mean",
+        "imagined_reward_min",
+        "imagined_reward_max",
+        "imagined_reward_std",
         "imagined_value_mean",
+        "imagined_value_std",
+        "imagined_return_mean",
+        "imagined_return_std",
+        "imagined_action_mean",
+        "imagined_action_std",
     }
     assert not torch.equal(actor_before, actor_after)
     assert not torch.equal(critic_before, critic_after)

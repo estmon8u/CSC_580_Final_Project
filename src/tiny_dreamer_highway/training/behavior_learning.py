@@ -48,18 +48,22 @@ def _backward_and_step(
     parameters,
     grad_clip_norm: float,
     grad_scaler: torch.amp.GradScaler | None = None,
-) -> None:
-    """Backward pass, gradient clipping, and optimizer step."""
+) -> float:
+    """Backward pass, gradient clipping, and optimizer step.
+
+    Returns the total gradient norm (before clipping).
+    """
     if grad_scaler is not None:
         grad_scaler.scale(loss).backward()
         grad_scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
         grad_scaler.step(optimizer)
         grad_scaler.update()
     else:
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
         optimizer.step()
+    return float(grad_norm)
 
 
 @contextmanager
@@ -272,7 +276,7 @@ def train_behavior_step(
             actor_loss = actor_loss - actor_entropy_weight * weighted_mean(
                 entropy, weights.squeeze(-1)
             )
-    _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
+    actor_grad_norm = _backward_and_step(actor_loss, actor_optimizer, actor.parameters(), grad_clip_norm, actor_scaler)
 
     # --- 3. Critic update: fit value function to λ-returns ---
     critic_optimizer.zero_grad(set_to_none=True)
@@ -280,13 +284,27 @@ def train_behavior_step(
         critic_dist = critic.distribution(imagined.features.detach())
         critic_log_prob = critic_dist.log_prob(returns.detach())
         critic_loss = -weighted_mean(critic_log_prob, weights.squeeze(-1).detach())
-    _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
+    critic_grad_norm = _backward_and_step(critic_loss, critic_optimizer, critic.parameters(), grad_clip_norm, critic_scaler)
 
+    imag_rew = imagined.rewards.detach()
+    imag_val = imagined.values.detach()
+    imag_act = imagined.actions.detach()
+    det_returns = returns.detach()
     metrics = {
         "actor_loss": float(actor_loss.detach().item()),
         "critic_loss": float(critic_loss.detach().item()),
-        "imagined_reward_mean": float(imagined.rewards.detach().mean().item()),
-        "imagined_value_mean": float(imagined.values.detach().mean().item()),
+        "actor_grad_norm": actor_grad_norm,
+        "critic_grad_norm": critic_grad_norm,
+        "imagined_reward_mean": float(imag_rew.mean().item()),
+        "imagined_reward_min": float(imag_rew.min().item()),
+        "imagined_reward_max": float(imag_rew.max().item()),
+        "imagined_reward_std": float(imag_rew.std().item()),
+        "imagined_value_mean": float(imag_val.mean().item()),
+        "imagined_value_std": float(imag_val.std().item()),
+        "imagined_return_mean": float(det_returns.mean().item()),
+        "imagined_return_std": float(det_returns.std().item()),
+        "imagined_action_mean": float(imag_act.mean().item()),
+        "imagined_action_std": float(imag_act.std().item()),
     }
     if actor_entropy_weight > 0.0:
         metrics["actor_entropy"] = float(entropy.detach().mean().item())

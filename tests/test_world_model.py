@@ -135,6 +135,7 @@ def test_train_world_model_step_runs_optimizer_step() -> None:
         "kl_dynamics",
         "kl_representation",
         "total_loss",
+        "wm_grad_norm",
     }
     assert metrics["total_loss"] >= 0.0
     assert metrics["kl_loss"] >= 0.0

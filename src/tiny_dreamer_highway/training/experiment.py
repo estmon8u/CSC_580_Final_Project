@@ -47,6 +47,158 @@ from tiny_dreamer_highway.training.pipeline import PipelineCycleMetrics, resolve
 from tiny_dreamer_highway.utils import set_global_seeds
 
 
+def _optimizer_lr(optimizer: torch.optim.Optimizer) -> float:
+    return float(optimizer.param_groups[0]["lr"])
+
+
+def _fmt(value: float | None, width: int = 10, precision: int = 4) -> str:
+    if value is None:
+        return "n/a".rjust(width)
+    if abs(value) < 0.01 and value != 0.0:
+        return f"{value:{width}.3e}"
+    return f"{value:{width}.{precision}f}"
+
+
+def _print_debug_cycle_details(
+    step: int,
+    total_cycles: int,
+    metrics: PipelineCycleMetrics,
+    *,
+    world_model_optimizer: torch.optim.Optimizer,
+    actor_optimizer: torch.optim.Optimizer,
+    critic_optimizer: torch.optim.Optimizer,
+    checkpoint_file: Path | None,
+) -> None:
+    wm = metrics.world_model_metrics
+    beh = metrics.behavior_metrics
+    ev = metrics.evaluation_metrics
+    warnings: list[str] = []
+
+    sep = "─" * 72
+    print(f"\n[DEBUG] {'═' * 20} CYCLE {step}/{total_cycles} DIAGNOSTIC {'═' * 20}", flush=True)
+
+    # ── Learning rates ───────────────────────────────────────────────
+    wm_lr = _optimizer_lr(world_model_optimizer)
+    actor_lr = _optimizer_lr(actor_optimizer)
+    critic_lr = _optimizer_lr(critic_optimizer)
+    print(f"  LR  │ world_model={wm_lr:.2e}  actor={actor_lr:.2e}  critic={critic_lr:.2e}")
+    print(f"  DATA│ replay={metrics.replay_size}  warm_added={metrics.warm_start_added}  policy_added={metrics.policy_added}")
+
+    # ── World model ──────────────────────────────────────────────────
+    print(f"\n  {sep}")
+    print("  WORLD MODEL")
+    print(f"  {sep}")
+    recon = wm.get("reconstruction_loss")
+    rew_loss = wm.get("reward_loss")
+    kl = wm.get("kl_loss")
+    kl_raw = wm.get("kl_loss_raw")
+    kl_dyn = wm.get("kl_dynamics")
+    kl_rep = wm.get("kl_representation")
+    cont = wm.get("continue_loss")
+    overshoot_kl = wm.get("overshooting_kl_loss")
+    total = wm.get("total_loss")
+    wm_gn = wm.get("wm_grad_norm")
+
+    print(f"    reconstruction_loss : {_fmt(recon)}")
+    print(f"    reward_loss         : {_fmt(rew_loss)}")
+    print(f"    kl_loss (weighted)  : {_fmt(kl)}    kl_raw: {_fmt(kl_raw)}")
+    print(f"    kl_dynamics         : {_fmt(kl_dyn)}    kl_representation: {_fmt(kl_rep)}")
+    if kl_dyn is not None and kl_rep is not None and kl_rep > 0:
+        ratio = kl_dyn / kl_rep
+        expected = "~4.0 for α=0.8"
+        status = "OK" if 1.5 < ratio < 10.0 else "UNUSUAL"
+        print(f"    kl dyn/rep ratio    : {ratio:.2f}  (expected {expected})  {status}")
+        if status == "UNUSUAL":
+            warnings.append(f"KL dyn/rep ratio {ratio:.2f} outside [1.5, 10] — balance may be off")
+    print(f"    continue_loss       : {_fmt(cont)}")
+    print(f"    overshooting_kl     : {_fmt(overshoot_kl)}")
+    print(f"    total_loss          : {_fmt(total)}")
+    print(f"    grad_norm           : {_fmt(wm_gn)}")
+
+    if wm_gn is not None and wm_gn < 1e-5:
+        warnings.append("WM grad_norm near zero — world model may have stopped learning")
+    if wm_gn is not None and wm_gn > 90.0:
+        warnings.append(f"WM grad_norm very high ({wm_gn:.1f}) — approaching clip limit, training may be unstable")
+    if recon is not None and recon > 0.1:
+        warnings.append(f"Reconstruction loss still high ({recon:.4f}) — encoder/decoder underperforming")
+
+    # ── Actor (behavior) ─────────────────────────────────────────────
+    print(f"\n  {sep}")
+    print("  ACTOR")
+    print(f"  {sep}")
+    act_loss = beh.get("actor_loss")
+    act_gn = beh.get("actor_grad_norm")
+    imag_rew_mean = beh.get("imagined_reward_mean")
+    imag_rew_min = beh.get("imagined_reward_min")
+    imag_rew_max = beh.get("imagined_reward_max")
+    imag_rew_std = beh.get("imagined_reward_std")
+    imag_val_mean = beh.get("imagined_value_mean")
+    imag_val_std = beh.get("imagined_value_std")
+    imag_ret_mean = beh.get("imagined_return_mean")
+    imag_ret_std = beh.get("imagined_return_std")
+    imag_act_mean = beh.get("imagined_action_mean")
+    imag_act_std = beh.get("imagined_action_std")
+
+    print(f"    actor_loss          : {_fmt(act_loss)}")
+    print(f"    grad_norm           : {_fmt(act_gn)}")
+    print(f"    imagined_reward     : mean={_fmt(imag_rew_mean)}  min={_fmt(imag_rew_min)}  max={_fmt(imag_rew_max)}  std={_fmt(imag_rew_std)}")
+    print(f"    imagined_values     : mean={_fmt(imag_val_mean)}  std={_fmt(imag_val_std)}")
+    print(f"    imagined_returns    : mean={_fmt(imag_ret_mean)}  std={_fmt(imag_ret_std)}")
+    print(f"    imagined_actions    : mean={_fmt(imag_act_mean)}  std={_fmt(imag_act_std)}")
+
+    if act_gn is not None and act_gn < 1e-6:
+        warnings.append("Actor grad_norm near zero — actor is NOT learning (no useful gradient signal)")
+    if imag_rew_max is not None and imag_rew_max <= 0.0:
+        warnings.append("All imagined rewards ≤ 0 — actor sees no positive outcomes to learn from")
+    if imag_rew_std is not None and imag_rew_std < 1e-4:
+        warnings.append("Imagined reward std ≈ 0 — reward predictor may be collapsed to a constant")
+    if imag_act_std is not None and imag_act_std < 0.01:
+        warnings.append(f"Action std very low ({imag_act_std:.4f}) — actor may have collapsed (no exploration)")
+    if imag_ret_std is not None and imag_ret_std < 1e-4:
+        warnings.append("Return std ≈ 0 — all imagined trajectories look the same to the actor")
+
+    if beh.get("actor_entropy") is not None:
+        print(f"    actor_entropy       : {_fmt(beh['actor_entropy'])}")
+
+    # ── Critic ───────────────────────────────────────────────────────
+    print(f"\n  {sep}")
+    print("  CRITIC")
+    print(f"  {sep}")
+    crit_loss = beh.get("critic_loss")
+    crit_gn = beh.get("critic_grad_norm")
+    print(f"    critic_loss         : {_fmt(crit_loss)}")
+    print(f"    grad_norm           : {_fmt(crit_gn)}")
+
+    if crit_gn is not None and crit_gn < 1e-6:
+        warnings.append("Critic grad_norm near zero — critic is not fitting value targets")
+    if crit_loss is not None and crit_loss > 50.0:
+        warnings.append(f"Critic loss very high ({crit_loss:.2f}) — value estimates may be wildly inaccurate")
+
+    # ── Evaluation ───────────────────────────────────────────────────
+    if ev:
+        print(f"\n  {sep}")
+        print("  EVALUATION")
+        print(f"  {sep}")
+        print(f"    mean_reward         : {_fmt(ev.get('mean_reward'))}")
+        print(f"    mean_steps          : {_fmt(ev.get('mean_steps'))}")
+        print(f"    crash_rate          : {_fmt(ev.get('crash_rate'))}")
+        crash = ev.get("crash_rate")
+        mean_steps = ev.get("mean_steps")
+        if crash is not None and crash > 0.8:
+            warnings.append(f"Crash rate {crash:.0%} — agent crashes in most episodes")
+        if mean_steps is not None and mean_steps < 20:
+            warnings.append(f"Mean episode length only {mean_steps:.0f} steps — agent dies immediately")
+
+    # ── Warning summary ──────────────────────────────────────────────
+    if warnings:
+        print(f"\n  {'⚠' * 3} WARNINGS {'⚠' * 3}")
+        for i, w in enumerate(warnings, 1):
+            print(f"    {i}. {w}")
+    else:
+        print(f"\n  ✓ No warnings — all levels look healthy")
+    print(f"[DEBUG] {'═' * 62}\n", flush=True)
+
+
 @dataclass(slots=True)
 class TrainingRunSummary:
     """Summary returned after a training experiment completes.
@@ -520,6 +672,20 @@ def run_training_experiment(
                 f"checkpoint={checkpoint_text}",
                 flush=True,
             )
+
+            if (
+                config.training.debug_logging == "verbose"
+                and step % config.training.debug_print_every == 0
+            ):
+                _print_debug_cycle_details(
+                    step,
+                    total_cycles,
+                    latest_metrics,
+                    world_model_optimizer=world_model_optimizer,
+                    actor_optimizer=actor_optimizer,
+                    critic_optimizer=critic_optimizer,
+                    checkpoint_file=checkpoint_file,
+                )
 
     latest_record = flatten_cycle_metrics(total_cycles, latest_metrics)
     return TrainingRunSummary(

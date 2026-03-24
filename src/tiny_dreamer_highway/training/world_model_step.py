@@ -173,21 +173,23 @@ def _backward_and_step(
     parameters,
     grad_clip_norm: float,
     grad_scaler: torch.amp.GradScaler | None = None,
-) -> None:
+) -> float:
     """Backward pass, gradient clipping, and optimizer step.
 
     Supports an optional :class:`GradScaler` for float16 AMP.
+    Returns the total gradient norm (before clipping).
     """
     if grad_scaler is not None:
         grad_scaler.scale(loss).backward()
         grad_scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
         grad_scaler.step(optimizer)
         grad_scaler.update()
     else:
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
+        grad_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm=grad_clip_norm)
         optimizer.step()
+    return float(grad_norm)
 
 
 # ---------------------------------------------------------------------------
@@ -228,8 +230,10 @@ def train_world_model_step(
             continue_loss_weight=continue_loss_weight,
         )
 
-    _backward_and_step(
+    wm_grad_norm = _backward_and_step(
         losses["total_loss"], optimizer, model.parameters(),
         grad_clip_norm, grad_scaler,
     )
-    return output, {name: float(value.detach().item()) for name, value in losses.items()}
+    metrics = {name: float(value.detach().item()) for name, value in losses.items()}
+    metrics["wm_grad_norm"] = wm_grad_norm
+    return output, metrics

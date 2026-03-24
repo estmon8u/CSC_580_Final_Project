@@ -72,6 +72,8 @@ training:
   warm_start_steps: 10000
   policy_steps: 32
   checkpoint_interval: 25
+  debug_logging: verbose
+  debug_print_every: 5
 evaluation:
   interval: 25
   episodes: 10

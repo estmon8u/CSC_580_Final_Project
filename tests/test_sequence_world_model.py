@@ -121,6 +121,7 @@ def test_train_sequence_world_model_step_updates_parameters() -> None:
         "overshooting_feature_mse",
         "overshooting_pairs",
         "total_loss",
+        "wm_grad_norm",
     }
     assert metrics["total_loss"] >= 0.0
     assert metrics["kl_loss"] >= 0.0

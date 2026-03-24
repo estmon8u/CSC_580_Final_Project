@@ -502,8 +502,10 @@ def train_sequence_world_model_step(
             overshooting_kl_weight=overshooting_kl_weight,
         )
 
-    _backward_and_step(
+    wm_grad_norm = _backward_and_step(
         losses["total_loss"], optimizer, model.parameters(),
         grad_clip_norm, grad_scaler,
     )
-    return outputs, {name: float(value.detach().item()) for name, value in losses.items()}
+    metrics = {name: float(value.detach().item()) for name, value in losses.items()}
+    metrics["wm_grad_norm"] = wm_grad_norm
+    return outputs, metrics

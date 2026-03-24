@@ -105,6 +105,8 @@ class TrainingConfig(BaseModel):
     warm_start_steps: int = Field(default=64, ge=0, le=1_000_000)
     policy_steps: int = Field(default=8, ge=0, le=1_000_000)
     checkpoint_interval: int = Field(default=5, ge=1, le=1_000_000)
+    debug_logging: Literal["off", "verbose"] = "off"
+    debug_print_every: int = Field(default=1, ge=1, le=1_000_000)
 
 
 class EvaluationConfig(BaseModel):
