@@ -76,7 +76,6 @@ def test_compute_sequence_world_model_losses_returns_outputs_per_step() -> None:
     assert set(losses.keys()) == {
         "reconstruction_loss",
         "reconstruction_mse",
-        "observation_log_prob",
         "reward_loss",
         "continue_loss",
         "kl_loss",
@@ -112,7 +111,6 @@ def test_train_sequence_world_model_step_updates_parameters() -> None:
     assert metrics.keys() == {
         "reconstruction_loss",
         "reconstruction_mse",
-        "observation_log_prob",
         "reward_loss",
         "continue_loss",
         "kl_loss",

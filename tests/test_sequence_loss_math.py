@@ -44,7 +44,6 @@ def test_vectorized_kl_matches_analytic() -> None:
         free_nats=0.0,
         kl_balance=0.5,
         continue_loss_weight=1.0,
-        observation_std=1.0,
         reward_std=1.0,
     )
 
@@ -77,7 +76,6 @@ def test_vectorized_reward_loss_matches_manual() -> None:
         free_nats=0.0,
         kl_balance=0.8,
         continue_loss_weight=1.0,
-        observation_std=1.0,
         reward_std=sigma,
     )
 
@@ -104,7 +102,6 @@ def test_vectorized_reconstruction_mse() -> None:
         free_nats=0.0,
         kl_balance=0.8,
         continue_loss_weight=1.0,
-        observation_std=1.0,
         reward_std=1.0,
     )
 
@@ -129,7 +126,6 @@ def test_vectorized_free_nats_clamping() -> None:
         free_nats=3.0,
         kl_balance=0.8,
         continue_loss_weight=1.0,
-        observation_std=1.0,
         reward_std=1.0,
     )
 
@@ -155,7 +151,6 @@ def test_vectorized_continue_loss_matches_bce() -> None:
         free_nats=0.0,
         kl_balance=0.8,
         continue_loss_weight=1.0,
-        observation_std=1.0,
         reward_std=1.0,
     )
 

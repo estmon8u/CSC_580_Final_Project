@@ -20,7 +20,6 @@ def make_metrics() -> PipelineCycleMetrics:
         world_model_metrics={
             "reconstruction_loss": 0.1,
             "reconstruction_mse": 0.02,
-            "observation_log_prob": -0.1,
             "reward_loss": 0.2,
             "total_loss": 0.3,
         },

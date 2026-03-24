@@ -134,7 +134,6 @@ def test_run_training_cycle_executes_warm_start_train_and_policy_collection(monk
     assert set(metrics.world_model_metrics.keys()) == {
         "reconstruction_loss",
         "reconstruction_mse",
-        "observation_log_prob",
         "reward_loss",
 	    "continue_loss",
 	    "kl_loss",
@@ -187,7 +186,6 @@ def test_run_training_cycle_repeats_updates_per_cycle(monkeypatch) -> None:
         return [], {
             "reconstruction_loss": 1.0,
             "reconstruction_mse": 0.1,
-            "observation_log_prob": -1.0,
             "reward_loss": 0.5,
 	        "continue_loss": 0.1,
             "kl_loss": 3.0,
@@ -311,7 +309,6 @@ def test_world_model_training_consumes_next_observations_not_observations(monkey
         return [], {
             "reconstruction_loss": 1.0,
             "reconstruction_mse": 0.1,
-            "observation_log_prob": -1.0,
             "reward_loss": 0.5,
             "continue_loss": 0.1,
             "kl_loss": 3.0,

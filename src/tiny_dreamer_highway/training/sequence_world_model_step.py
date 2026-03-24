@@ -62,7 +62,6 @@ def _compute_vectorized_losses(
     free_nats: float,
     kl_balance: float,
     continue_loss_weight: float,
-    observation_std: float,
     reward_std: float,
 ) -> dict[str, Tensor]:
     """Compute all world-model losses in one vectorized pass.
@@ -74,8 +73,8 @@ def _compute_vectorized_losses(
 
     Loss components:
 
-    1. **Reconstruction loss** — negative Gaussian log-probability of the
-       true observation under the decoder’s predicted distribution.
+    1. **Reconstruction loss** — MSE between the decoder's predicted
+       image and the true observation (DreamerV2 style).
     2. **Reward loss** — negative Gaussian log-probability of the real
        reward under the reward predictor’s output.
     3. **Continue loss** — binary cross-entropy between the continue
@@ -94,8 +93,6 @@ def _compute_vectorized_losses(
         terminal_targets:   Boolean terminal flags or None, shape ``(B, T)``.
         free_nats:          KL floor — KL below this value is not penalized.
         continue_loss_weight: Scaling factor for the continue loss.
-        observation_std:    Fixed std of the decoder Gaussian (controls
-                            how sharply reconstruction error is penalized).
         reward_std:         Fixed std of the reward Gaussian.
 
     Returns:
@@ -112,31 +109,10 @@ def _compute_vectorized_losses(
         target_obs = target_obs / 255.0
     target_rew = rewards.unsqueeze(-1).to(dtype=predicted_rewards.dtype)  # (B, T, 1)
 
-    # ── Reconstruction loss (Gaussian log-prob) ──────────────────────
-    # Model the decoder output as a diagonal Gaussian with fixed variance.
-    # The log-probability under this Gaussian is equivalent to a scaled
-    # MSE plus a constant, but we compute it explicitly to stay
-    # consistent with the probabilistic derivation in the Dreamer paper.
-    recon_var = observation_std ** 2
-    recon_sq_err = (reconstructions - target_obs).pow(2)
-    reconstruction_mse = recon_sq_err.mean()  # tracked for monitoring
-
-    # Total event dimensionality d = C * H * W (product of spatial dims)
-    event_dims = reconstructions.shape[2:]  # (C, H, W)
-    d = 1
-    for s in event_dims:
-        d *= s
-
-    # Full multivariate Gaussian log-prob (diagonal covariance):
-    # log p = -0.5 * (d*log(2π) + d*log(σ²) + Σ (x-μ)² / σ²)
-    log_prob_per_sample = -0.5 * (
-        d * math.log(2 * math.pi)
-        + d * math.log(recon_var)
-        + recon_sq_err.reshape(B, T, -1).sum(dim=-1) / recon_var
-    )  # (B, T)
-    observation_log_prob = log_prob_per_sample.mean()
-    # Negate because we minimize the loss (maximize log-prob)
-    reconstruction_loss = -observation_log_prob
+    # ── Reconstruction loss (MSE — DreamerV2) ────────────────────────
+    # DreamerV2 replaces the Gaussian NLL with direct MSE, which is
+    # equivalent up to a constant when the decoder std is fixed.
+    reconstruction_loss = F.mse_loss(reconstructions, target_obs)
 
     # ── Reward loss (Gaussian log-prob) ──────────────────────────────
     # Same Gaussian log-prob formulation as reconstruction, but for a
@@ -173,8 +149,7 @@ def _compute_vectorized_losses(
 
     return {
         "reconstruction_loss": reconstruction_loss,
-        "reconstruction_mse": reconstruction_mse,
-        "observation_log_prob": observation_log_prob,
+        "reconstruction_mse": reconstruction_loss.detach(),
         "reward_loss": reward_loss,
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
@@ -438,7 +413,6 @@ def compute_sequence_world_model_losses(
         free_nats=free_nats,
         kl_balance=kl_balance,
         continue_loss_weight=continue_loss_weight,
-        observation_std=(1.0 if model.decoder.distribution_std is None else model.decoder.distribution_std),
         reward_std=(1.0 if model.reward_predictor.distribution_std is None else model.reward_predictor.distribution_std),
     )
 

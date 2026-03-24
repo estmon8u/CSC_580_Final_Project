@@ -25,6 +25,7 @@ import torch.nn.functional as F
 from torch.distributions import Independent, Normal
 from torch import Tensor, optim
 
+
 from tiny_dreamer_highway.models.world_model import TinyWorldModel, WorldModelOutput
 
 
@@ -106,14 +107,8 @@ def compute_world_model_losses(
         target_observations = target_observations / 255.0
 
     reward_targets = target_rewards.reshape(-1, 1).to(dtype=output.predicted_reward.dtype)
-    reconstruction_mse = F.mse_loss(output.reconstruction, target_observations)
-    observation_std = 1.0 if output.predicted_observation_std is None else output.predicted_observation_std
-    observation_dist = Independent(
-        Normal(output.reconstruction, torch.full_like(output.reconstruction, observation_std)),
-        output.reconstruction.ndim - 1,
-    )
-    observation_log_prob = observation_dist.log_prob(target_observations)
-    reconstruction_loss = -observation_log_prob.mean()
+    # DreamerV2: direct MSE reconstruction loss (replaces Gaussian NLL)
+    reconstruction_loss = F.mse_loss(output.reconstruction, target_observations)
     reward_std = 1.0 if output.predicted_reward_std is None else output.predicted_reward_std
     reward_dist = Independent(
         Normal(output.predicted_reward, torch.full_like(output.predicted_reward, reward_std)),
@@ -157,8 +152,7 @@ def compute_world_model_losses(
     )
     return {
         "reconstruction_loss": reconstruction_loss,
-        "reconstruction_mse": reconstruction_mse,
-        "observation_log_prob": observation_log_prob.mean(),
+        "reconstruction_mse": reconstruction_loss.detach(),
         "reward_loss": reward_loss,
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
