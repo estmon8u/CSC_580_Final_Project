@@ -82,7 +82,7 @@ model:
   embedding_dim: 1024
   deterministic_dim: 200
   num_categoricals: 32
-  num_classes: 32
+  num_classes: 16
   hidden_dim: 200
   rssm_num_layers: 2
   rssm_min_std: 0.1
