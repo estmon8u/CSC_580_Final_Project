@@ -107,8 +107,11 @@ def compute_world_model_losses(
         target_observations = target_observations / 255.0
 
     reward_targets = target_rewards.reshape(-1, 1).to(dtype=output.predicted_reward.dtype)
-    # DreamerV2: direct MSE reconstruction loss (replaces Gaussian NLL)
-    reconstruction_loss = F.mse_loss(output.reconstruction, target_observations)
+    # Keep pixel-mean MSE for logging, but train with per-image summed MSE
+    # so reconstruction stays on a comparable scale to the old Gaussian NLL.
+    reconstruction_mse = F.mse_loss(output.reconstruction, target_observations)
+    mse_per_pixel = F.mse_loss(output.reconstruction, target_observations, reduction="none")
+    reconstruction_loss = mse_per_pixel.sum(dim=(-3, -2, -1)).mean()
     reward_std = 1.0 if output.predicted_reward_std is None else output.predicted_reward_std
     reward_dist = Independent(
         Normal(output.predicted_reward, torch.full_like(output.predicted_reward, reward_std)),
@@ -152,7 +155,7 @@ def compute_world_model_losses(
     )
     return {
         "reconstruction_loss": reconstruction_loss,
-        "reconstruction_mse": reconstruction_loss.detach(),
+        "reconstruction_mse": reconstruction_mse.detach(),
         "reward_loss": reward_loss,
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,

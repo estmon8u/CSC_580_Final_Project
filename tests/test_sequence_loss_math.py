@@ -107,6 +107,7 @@ def test_vectorized_reconstruction_mse() -> None:
 
     # MSE(0.5 - 0.0) for all 16 pixels = 0.25
     assert torch.allclose(losses["reconstruction_mse"], torch.tensor(0.25), atol=1e-5)
+    assert torch.allclose(losses["reconstruction_loss"], torch.tensor(4.0), atol=1e-5)
 
 
 def test_vectorized_free_nats_clamping() -> None:

@@ -110,9 +110,12 @@ def _compute_vectorized_losses(
     target_rew = rewards.unsqueeze(-1).to(dtype=predicted_rewards.dtype)  # (B, T, 1)
 
     # ── Reconstruction loss (MSE — DreamerV2) ────────────────────────
-    # DreamerV2 replaces the Gaussian NLL with direct MSE, which is
-    # equivalent up to a constant when the decoder std is fixed.
-    reconstruction_loss = F.mse_loss(reconstructions, target_obs)
+    # Log the standard pixel-mean MSE, but train with per-image summed
+    # MSE so image fidelity is not underweighted by averaging over every
+    # channel/pixel element in the frame stack.
+    reconstruction_mse = F.mse_loss(reconstructions, target_obs)
+    mse_per_pixel = F.mse_loss(reconstructions, target_obs, reduction="none")
+    reconstruction_loss = mse_per_pixel.sum(dim=(-3, -2, -1)).mean()
 
     # ── Reward loss (Gaussian log-prob) ──────────────────────────────
     # Same Gaussian log-prob formulation as reconstruction, but for a
@@ -149,7 +152,7 @@ def _compute_vectorized_losses(
 
     return {
         "reconstruction_loss": reconstruction_loss,
-        "reconstruction_mse": reconstruction_loss.detach(),
+        "reconstruction_mse": reconstruction_mse.detach(),
         "reward_loss": reward_loss,
         "continue_loss": continue_loss,
         "kl_loss": kl_loss,
@@ -384,11 +387,13 @@ def compute_sequence_world_model_losses(
         posterior_states.append(state)
 
     # ── 3. Vectorized DECODER & REWARD ────────────────────────────────
-    # Stack posterior features across time into (B, T, latent_dim) and
-    # decode all steps at once, avoiding a Python loop.
+    # Stack posterior features across time into (B, T, latent_dim). The
+    # decoder uses a soft posterior view for denser reconstruction gradients,
+    # while reward/continue heads stay on the standard hard latent features.
+    reconstruction_features = torch.stack([s.reconstruction_features for s in posterior_states], dim=1)
     features = torch.stack([s.features for s in posterior_states], dim=1)
 
-    reconstructions = model.decoder(features)                 # (B, T, C, H, W)
+    reconstructions = model.decoder(reconstruction_features)  # (B, T, C, H, W)
     predicted_rewards = model.reward_predictor(features)      # (B, T, 1)
     predicted_continues = (
         model.continue_predictor(features) if model.continue_predictor is not None else None

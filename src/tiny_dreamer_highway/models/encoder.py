@@ -66,6 +66,23 @@ class LatentState:
             return self.embedding
         raise ValueError("LatentState must contain at least one tensor")
 
+    @property
+    def reconstruction_features(self) -> Tensor:
+        """Return decoder features, using soft categorical probabilities when available.
+
+        For DreamerV2 posterior states, the decoder benefits from a denser
+        training signal than the hard straight-through one-hot sample used by
+        the actor/critic and imagination paths. When logits are present, this
+        returns ``[softmax(logits) ; h_t]``; otherwise it falls back to the
+        standard latent features.
+        """
+        if self.logits is not None:
+            soft_stochastic = torch.softmax(self.logits, dim=-1).reshape(self.logits.shape[0], -1)
+            if self.deterministic is not None:
+                return torch.cat([soft_stochastic, self.deterministic], dim=-1)
+            return soft_stochastic
+        return self.features
+
 
 class ObservationEncoder(nn.Module):
     """4-layer CNN encoder that maps pixel observations to embedding vectors.

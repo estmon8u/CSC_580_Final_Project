@@ -170,8 +170,9 @@ class TinyWorldModel(nn.Module):
 
         prior_state = self.rssm.imagine_step(prev_state, actions)
         posterior_state = self.rssm.observe_step(prev_state, actions, embedding)
+        reconstruction_features = posterior_state.reconstruction_features
         latent_features = posterior_state.features
-        reconstruction = self.decoder(latent_features)
+        reconstruction = self.decoder(reconstruction_features)
         predicted_reward = self.reward_predictor(latent_features)
         predicted_continue = (
             self.continue_predictor(latent_features) if self.continue_predictor is not None else None

@@ -351,3 +351,17 @@ def test_observations_normalised_from_uint8() -> None:
     assert torch.allclose(
         losses1["reconstruction_mse"], losses2["reconstruction_mse"], atol=1e-5
     )
+
+
+def test_reconstruction_loss_sums_image_dimensions() -> None:
+    """reconstruction_loss sums over C/H/W and averages over batch."""
+    output = _make_dummy_world_model_output(batch_size=2, obs_shape=(1, 4, 4))
+    target_obs = torch.zeros(2, 1, 4, 4, dtype=torch.uint8)
+    target_rewards = torch.zeros(2)
+
+    losses = compute_world_model_losses(
+        output, target_obs, target_rewards, kl_weight=1.0, free_nats=0.0,
+    )
+
+    assert torch.allclose(losses["reconstruction_mse"], torch.tensor(0.25), atol=1e-5)
+    assert torch.allclose(losses["reconstruction_loss"], torch.tensor(4.0), atol=1e-5)

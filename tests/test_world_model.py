@@ -1,9 +1,25 @@
 import torch
 
 from tiny_dreamer_highway.models import TinyWorldModel
+from tiny_dreamer_highway.models.encoder import LatentState
 from tiny_dreamer_highway.models.world_model import WorldModelOutput
 from tiny_dreamer_highway.training import compute_world_model_losses, train_world_model_step
 from tiny_dreamer_highway.training.world_model_step import _raw_categorical_kl
+
+
+def test_latent_state_reconstruction_features_use_soft_categorical_probs() -> None:
+    logits = torch.tensor([[[10.0, -10.0], [-10.0, 10.0]]])
+    state = LatentState(
+        deterministic=torch.tensor([[0.25, -0.5]]),
+        stochastic=torch.tensor([[1.0, 0.0, 0.0, 1.0]]),
+        logits=logits,
+    )
+
+    reconstruction_features = state.reconstruction_features
+
+    expected_soft = torch.softmax(logits, dim=-1).reshape(1, -1)
+    assert torch.allclose(reconstruction_features[:, :4], expected_soft, atol=1e-6)
+    assert torch.allclose(reconstruction_features[:, 4:], state.deterministic)
 
 
 def test_tiny_world_model_forward_returns_expected_shapes() -> None:
