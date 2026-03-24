@@ -103,13 +103,12 @@ def _print_debug_cycle_details(
     print(f"    reward_loss         : {_fmt(rew_loss)}")
     print(f"    kl_loss (weighted)  : {_fmt(kl)}    kl_raw: {_fmt(kl_raw)}")
     print(f"    kl_dynamics         : {_fmt(kl_dyn)}    kl_representation: {_fmt(kl_rep)}")
-    if kl_dyn is not None and kl_rep is not None and kl_rep > 0:
-        ratio = kl_dyn / kl_rep
-        expected = "~4.0 for α=0.8"
-        status = "OK" if 1.5 < ratio < 10.0 else "UNUSUAL"
-        print(f"    kl dyn/rep ratio    : {ratio:.2f}  (expected {expected})  {status}")
-        if status == "UNUSUAL":
-            warnings.append(f"KL dyn/rep ratio {ratio:.2f} outside [1.5, 10] — balance may be off")
+    # NOTE: kl_dynamics == kl_representation is expected by design.
+    # They compute the same KL(posterior || prior); the α-balance happens
+    # via stop-gradients that route 80% of gradient to the prior and 20%
+    # to the posterior — the raw scalar values are always identical.
+    if kl_raw is not None and kl_raw < 0.1:
+        warnings.append(f"KL raw very low ({kl_raw:.4f}) — posterior ≈ prior, latent may lack diversity")
     print(f"    continue_loss       : {_fmt(cont)}")
     print(f"    overshooting_kl     : {_fmt(overshoot_kl)}")
     print(f"    total_loss          : {_fmt(total)}")

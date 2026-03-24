@@ -63,6 +63,7 @@ training:
   continue_loss_weight: 1.0
   grad_clip_norm: 100.0
   deterministic_torch: false
+  actor_entropy_weight: 0.003
   lr_warmup_steps: 50
   use_amp: true
   amp_dtype: bfloat16
