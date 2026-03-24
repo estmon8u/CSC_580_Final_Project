@@ -52,15 +52,15 @@ training:
   overshooting_horizon: 5
   overshooting_kl_weight: 0.5
   world_model_lr: 0.0003
-  actor_lr: 0.00008
-  critic_lr: 0.00008
+  actor_lr: 0.0003
+  critic_lr: 0.0003
   kl_weight: 1.0
   kl_balance: 0.8
   free_nats: 3.0
   continue_loss_weight: 1.0
   grad_clip_norm: 100.0
   deterministic_torch: false
-  actor_entropy_weight: 0.003
+  actor_entropy_weight: 0.01
   lr_warmup_steps: 50
   use_amp: true
   amp_dtype: bfloat16
